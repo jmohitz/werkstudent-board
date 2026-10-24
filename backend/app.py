@@ -3,6 +3,7 @@
 Run:  uvicorn app:app --reload --port 8000   (from backend/)
 """
 import os
+from datetime import date, timedelta
 from pathlib import Path
 
 import psycopg
@@ -17,6 +18,23 @@ FRONTEND = Path(__file__).parent.parent / "frontend"
 
 app = FastAPI(title="Werkstudent Board")
 
+POSTED = "coalesce(date_posted, date_found)"  # some sites give no posting date
+# posted filter -> (from N days ago, to N days ago), both inclusive
+POSTED_RANGES = {
+    "today": (0, 0),
+    "yesterday": (1, 1),
+    "3d": (3, 0),
+    "7d": (7, 0),
+    "30d": (30, 0),
+}
+
+
+def posted_bounds(key: str) -> tuple[date, date]:
+    # "today" is the machine's local date, not the DB container's (UTC)
+    start, end = POSTED_RANGES[key]
+    today = date.today()
+    return today - timedelta(days=start), today - timedelta(days=end)
+
 
 def query(sql: str, params: list) -> list[dict]:
     with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
@@ -28,6 +46,7 @@ def list_jobs(
     category: str | None = None,
     q: str | None = Query(None, description="Search in title and company"),
     min_relevance: int = 0,
+    posted: str | None = Query(None, description="today, yesterday, 3d, 7d or 30d"),
     limit: int = Query(100, le=500),
     offset: int = 0,
 ):
@@ -35,6 +54,9 @@ def list_jobs(
     if category:
         where.append("category = %s")
         params.append(category)
+    if posted in POSTED_RANGES:
+        where.append(f"{POSTED} BETWEEN %s AND %s")
+        params += list(posted_bounds(posted))
     if q:
         where.append("(title ILIKE %s OR company ILIKE %s)")
         params += [f"%{q}%"] * 2
@@ -42,9 +64,9 @@ def list_jobs(
 
     jobs = query(
         f"""SELECT id, title, company, location, site, category, field, german_required,
-                   relevance, job_url, coalesce(date_posted, date_found) AS posted
+                   relevance, job_url, {POSTED} AS posted
             FROM jobs WHERE {cond}
-            ORDER BY coalesce(date_posted, date_found) DESC, relevance DESC NULLS LAST, id DESC
+            ORDER BY {POSTED} DESC, relevance DESC NULLS LAST, id DESC
             LIMIT %s OFFSET %s""",
         params + [limit, offset],
     )
@@ -55,7 +77,12 @@ def list_jobs(
 @app.get("/api/stats")
 def stats():
     rows = query("SELECT category, count(*) AS n FROM jobs GROUP BY category ORDER BY n DESC", [])
-    return {"total": sum(r["n"] for r in rows), "by_category": rows}
+    counts, params = [], []
+    for key in POSTED_RANGES:
+        counts.append(f"count(*) FILTER (WHERE {POSTED} BETWEEN %s AND %s) AS \"{key}\"")
+        params += list(posted_bounds(key))
+    by_posted = query(f"SELECT {', '.join(counts)} FROM jobs", params)[0]
+    return {"total": sum(r["n"] for r in rows), "by_category": rows, "by_posted": by_posted}
 
 
 # Mounted last so /api/* routes take precedence

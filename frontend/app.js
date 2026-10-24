@@ -6,7 +6,16 @@ const CAT = {
   thesis: { code: "TH", label: "Thesis" },
 };
 
-const state = { category: "", q: "", minRel: 4, offset: 0 };
+const POSTED = [
+  ["", "Any time"],
+  ["today", "Today"],
+  ["yesterday", "Yesterday"],
+  ["3d", "Last 3 days"],
+  ["7d", "Last 7 days"],
+  ["30d", "Last 30 days"],
+];
+
+const state = { category: "", posted: "", q: "", minRel: 4, offset: 0 };
 const $ = (id) => document.getElementById(id);
 
 function esc(s) {
@@ -49,6 +58,7 @@ async function loadJobs(append = false) {
   if (!append) state.offset = 0;
   const p = new URLSearchParams({ limit: PAGE, offset: state.offset, min_relevance: state.minRel });
   if (state.category) p.set("category", state.category);
+  if (state.posted) p.set("posted", state.posted);
   if (state.q) p.set("q", state.q);
 
   try {
@@ -70,13 +80,18 @@ async function loadJobs(append = false) {
 
 async function loadStats() {
   try {
-    const { total, by_category } = await (await fetch("/api/stats")).json();
+    const { total, by_category, by_posted } = await (await fetch("/api/stats")).json();
     $("total").textContent = total.toLocaleString();
     const items = [{ category: "", n: total }, ...by_category];
     $("cats").innerHTML = items.map((c) => `
       <li><button data-cat="${esc(c.category)}" aria-pressed="${c.category === state.category}">
         <span>${c.category ? `[${CAT[c.category]?.code ?? "?"}] ${esc(CAT[c.category]?.label ?? c.category)}` : "> All"}</span>
         <span class="n">${c.n}</span>
+      </button></li>`).join("");
+    $("posted").innerHTML = POSTED.map(([key, label]) => `
+      <li><button data-posted="${key}" aria-pressed="${key === state.posted}">
+        <span>${label}</span>
+        <span class="n">${key ? by_posted[key] : total}</span>
       </button></li>`).join("");
   } catch {
     $("total").textContent = "—";
@@ -89,6 +104,14 @@ $("cats").addEventListener("click", (e) => {
   state.category = btn.dataset.cat;
   document.querySelectorAll("#cats button").forEach((b) => b.setAttribute("aria-pressed", b === btn));
   $("path").textContent = state.category ? `~/${CAT[state.category]?.label.toLowerCase() ?? state.category}` : "~/all jobs";
+  loadJobs();
+});
+
+$("posted").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  state.posted = btn.dataset.posted;
+  document.querySelectorAll("#posted button").forEach((b) => b.setAttribute("aria-pressed", b === btn));
   loadJobs();
 });
 
