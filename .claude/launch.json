@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "board",
+      "runtimeExecutable": "backend/.venv/bin/uvicorn",
+      "runtimeArgs": ["app:app", "--app-dir", "backend", "--reload", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

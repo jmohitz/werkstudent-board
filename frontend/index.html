@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Werkstudent Board</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">wsb<span class="dim">:</span> <span class="path" id="path">~/all jobs</span></span>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="block">
+        <div class="big" id="total">…</div>
+        <div class="dim">jobs on the board</div>
+      </div>
+
+      <div class="block">
+        <div class="label">Category</div>
+        <ul class="cats" id="cats"></ul>
+      </div>
+
+      <div class="block">
+        <label class="label" for="minrel">Min relevance</label>
+        <select id="minrel">
+          <option value="0">any</option>
+          <option value="3">3+</option>
+          <option value="4" selected>4+</option>
+          <option value="5">5 only</option>
+        </select>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="panel-head">
+        <input id="q" type="search" placeholder="Quick search title or company…" autocomplete="off">
+        <span class="dim" id="count"></span>
+      </div>
+      <ol class="jobs" id="jobs"></ol>
+      <button class="more" id="more" hidden>Load more</button>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
