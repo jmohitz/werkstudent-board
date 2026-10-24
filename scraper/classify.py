@@ -51,15 +51,21 @@ logger = logging.getLogger("classify")
 class Classifier:
     def __init__(self, cfg: dict):
         oc = cfg["ollama"]
-        self.client = Client(host=oc["host"])
+        # timeout: a stuck request fails over to the keyword fallback instead of hanging the run
+        self.client = Client(host=oc["host"], timeout=oc.get("timeout_s", 120))
         self.model = oc["model"]
         self.max_chars = oc.get("max_description_chars", 2000)
+        self.max_tokens = oc.get("max_output_tokens", 400)
         self.profile = cfg["profile"]
         self.schema = JobLabel.model_json_schema()
 
     def classify(self, title: str, company: str, location: str, description: str) -> dict:
+        # Missing values arrive from pandas as NaN (a float), which `x or ""` doesn't catch
+        title, company, location, description = (
+            v if isinstance(v, str) else "" for v in (title, company, location, description)
+        )
         hint = keyword_hint(title)
-        desc = (description or "")[: self.max_chars]
+        desc = description[: self.max_chars]
         user = (
             f"Candidate profile:\n{self.profile}\n\n"
             f"Job title: {title}\nCompany: {company}\nLocation: {location}\n"
@@ -71,7 +77,10 @@ class Classifier:
                 model=self.model,
                 messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
                 format=self.schema,
-                options={"temperature": 0},
+                # num_predict: small models sometimes loop inside a JSON string forever;
+                # a valid label is ~100-200 tokens, so cut off long before that becomes a hang
+                # (truncated JSON fails validation -> keyword fallback below)
+                options={"temperature": 0, "num_predict": self.max_tokens},
                 think=False,  # qwen3: skip the reasoning trace, we only want the JSON
             )
             label = JobLabel.model_validate_json(resp.message.content)
