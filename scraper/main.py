@@ -4,6 +4,7 @@ Outputs (in output_dir):
   jobs_YYYY-MM-DD.csv  today's new, categorised jobs
   all_jobs.csv         running history of everything (used by the frontend)
 """
+import argparse
 from datetime import date
 from pathlib import Path
 import logging
@@ -16,6 +17,7 @@ from tqdm import tqdm
 
 from classify import Classifier
 from scrape import dedupe, iter_searches, scrape_term
+from db import load_seen, save_jobs
 
 BASE = Path(__file__).parent
 COLUMNS = [
@@ -25,7 +27,14 @@ COLUMNS = [
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--hours-old", type=int,
+                        help="only jobs posted within this many hours (overrides config.yaml for this run)")
+    args = parser.parse_args()
+
     cfg = yaml.safe_load((BASE / "config.yaml").read_text(encoding="utf-8"))
+    if args.hours_old:
+        cfg["hours_old"] = args.hours_old
     out_dir = BASE / cfg["output_dir"]
     out_dir.mkdir(exist_ok=True)
     all_path = out_dir / "all_jobs.csv"
@@ -40,7 +49,7 @@ def main():
     )
     logger = logging.getLogger("main")
 
-    logger.info("Starting job scraper pipeline...")
+    logger.info(f"Starting job scraper pipeline (jobs from the last {cfg['hours_old']}h)...")
 
     today_path = out_dir / f"jobs_{date.today().isoformat()}.csv"
     clf = Classifier(cfg)
@@ -53,6 +62,13 @@ def main():
             old = pd.read_csv(path, usecols=["job_url", "title", "company"])
             seen_urls |= set(old["job_url"])
             seen_keys |= set(_key(old))
+    try:  # the database is the full history; the CSVs may be partial
+        old = load_seen()
+        seen_urls |= set(old["job_url"])
+        seen_keys |= set(_key(old))
+    except Exception as e:
+        logger.warning(f"Could not read seen jobs from DB, using CSVs only: {e}")
+    logger.info(f"{len(seen_urls)} known jobs will be skipped")
 
     total = 0
     for bucket, term in iter_searches(cfg):
@@ -91,6 +107,10 @@ def main():
             # Saved immediately: a crash or rate limit later never loses finished searches
             for path in (today_path, all_path):
                 df.to_csv(path, mode="a", header=not path.exists(), index=False, encoding="utf-8-sig")
+            try:
+                save_jobs(df)
+            except Exception as e:
+                logger.error(f"DB save failed for '{term}' (CSV still written): {e}")
             total += len(df)
             logger.info(f"saved {len(df)} jobs from '{term}' (run total {total})")
         except Exception as e:
