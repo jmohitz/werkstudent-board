@@ -1,0 +1,7 @@
+python-jobspy
+ollama
+pydantic>=2
+pandas
+pyyaml
+tqdm
+streamlit

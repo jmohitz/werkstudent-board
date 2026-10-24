@@ -1,0 +1,74 @@
+# ---------- Scraping ----------
+location: "Germany"
+country_indeed: "germany"
+
+# JobSpy sites. indeed + linkedin are the most reliable for Germany.
+# You can also try "glassdoor" and "google" (google uses google_search_term internally).
+sites: ["indeed", "linkedin", "glassdoor"]
+
+hours_old: 26              # a bit more than 24h so a late run doesn't miss anything
+results_per_search: 40     # per search term per site
+linkedin_fetch_description: true   # slower, but gives the LLM much better input
+# Extra boards: arbeitnow (public API); stepstone / xing / jobware / fraunhofer (research)
+# are best-effort HTML scraping.
+# jobvector.de is behind a Cloudflare challenge, dfki.de too (Cloudflare); are not supported.
+extra_sites: ["arbeitnow", "stepstone", "xing", "jobware", "fraunhofer"]
+html_board_max_jobs: 15    # postings fetched per term per HTML board
+google: true              # Google Jobs via JobSpy (flaky; failures are skipped)
+arbeitsagentur:            # Bundesagentur fuer Arbeit Jobsuche API
+  enabled: true
+  location: "Deutschland"
+  fetch_details: true      # extra request per job for the full description
+sleep_between_searches: 6  # seconds; be gentle to avoid rate limits
+
+# Each bucket is a hint only; the LLM decides the final category.
+searches:
+  working_student:
+    - "Werkstudent Data"
+    - "Werkstudent Data Engineering"
+    - "Werkstudent Machine Learning"
+    - "Working Student Data Science"
+    - "Werkstudent Software Entwicklung"
+    - "Werkstudent Software Engineer"
+    - "Working Student Software Engineer"
+    - "Werkstudent AI Engineer"
+    - "Werkstudent KI"
+    - "Werkstudent Java Entwickler"
+    - "Werkstudent Backend Python"
+    - "Werkstudent Cloud DevOps"
+  internship:
+    - "Praktikum Data Science"
+    - "Praktikum Machine Learning"
+    - "Internship Data Engineer"
+    - "Pflichtpraktikum Informatik"
+    - "Praktikum Software Engineer"
+    - "Internship Software Engineer"
+    - "Praktikum AI Engineer"
+    - "Praktikum Java Entwickler"
+    - "Praktikum Backend Entwicklung"
+  thesis:
+    - "Masterarbeit Data Science"
+    - "Masterarbeit Machine Learning"
+    - "Abschlussarbeit Informatik"
+    - "Master thesis AI"
+    - "Masterarbeit LLM"
+    - "Masterarbeit Software Engineering"
+    - "Masterarbeit Data Engineering"
+
+# Hard rules, checked on the TITLE before the LLM runs (case-insensitive regex). Matches are
+# rejected without an LLM call, which also saves time. Keep patterns specific.
+reject_title_patterns:
+  - '\b(ausbildung|auszubildende[rn]?|azubi|schulpraktikum|schülerpraktikum|schuelerpraktikum|duales? studium)\b'
+  - '\b(senior|lead|leiter(in)?|head of|principal|staff engineer|architect|architekt(in)?|director)\b'
+
+# Drop anything the LLM labels with these categories from the output
+drop_categories: ["full_time", "other"]
+
+# ---------- LLM ----------
+ollama:
+  host: "http://localhost:11434"
+  model: "qwen2.5:3b"      # alternatives: qwen3:4b (slower, ~20 s/job), llama3.2:3b, qwen2.5:7b
+  max_description_chars: 2000
+
+# ---------- Output ----------
+output_dir: "output"
