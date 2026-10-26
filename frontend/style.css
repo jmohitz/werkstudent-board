@@ -177,6 +177,9 @@ details.d-section summary { cursor: pointer; }
 .t-title { font-weight: 700; }
 .t-block ul { margin: 2px 0; padding-left: 18px; }
 
+/* read-only demo: hide everything that writes or calls the LLM */
+body.demo select.status, body.demo .d-section:not(details), body.demo .sort { display: none; }
+
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; }

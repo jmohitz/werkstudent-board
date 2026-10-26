@@ -6,3 +6,6 @@ __pycache__/
 
 # secrets
 .env
+
+# demo sample data (exported from scraped postings, not committed)
+db/demo_jobs.json

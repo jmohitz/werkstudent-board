@@ -4,6 +4,7 @@ letters / resume tips, and serves the frontend.
 Run:  uvicorn app:app --reload --port 8000   (from backend/)
 """
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from pathlib import Path
@@ -22,15 +23,34 @@ from db import query
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 FRONTEND = Path(__file__).parent.parent / "frontend"
 MAX_UPLOAD = 5 * 1024 * 1024
+# Read-only public demo: browsing and filters only; no CV upload, AI calls or tracker writes
+DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    matching.start_background_embedding()  # embeds jobs that don't have a vector yet, ~90/min
+    if not DEMO_MODE:
+        matching.start_background_embedding()  # embeds jobs that don't have a vector yet
     yield
 
 
 app = FastAPI(title="Werkstudent Board", lifespan=lifespan)
+
+
+DEMO_BLOCKED = ("/api/resume", "/api/applications", "/cover-letter", "/tips")
+
+
+@app.middleware("http")
+async def demo_read_only(request: Request, call_next):
+    if DEMO_MODE and request.method != "GET" and any(p in request.url.path for p in DEMO_BLOCKED):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Disabled in the read-only demo"}, status_code=403)
+    return await call_next(request)
+
+
+@app.get("/api/config")
+def config():
+    return {"demo": DEMO_MODE}
 
 
 @app.middleware("http")

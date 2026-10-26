@@ -2,6 +2,9 @@
 
 Served by `backend/app.py` on <http://localhost:8000>. Interactive docs: <http://localhost:8000/docs>.
 
+`GET /api/config` returns `{"demo": true|false}`. In demo mode (`DEMO_MODE=1`) every non-GET request
+to the resume, tracker and AI endpoints returns `403`.
+
 ## Jobs
 
 ### `GET /api/jobs`

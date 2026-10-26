@@ -41,7 +41,7 @@ const LEVEL = { strong: "Strong fit", good: "Good fit", partial: "Partial fit", 
 // one key per sidebar list; "" = no filter
 const state = {
   category: "", posted: "", field: "", work_mode: "", site: "", status: "", english: false, q: "",
-  sort: "newest", offset: 0, resume: null, openJob: null,
+  sort: "newest", offset: 0, resume: null, openJob: null, demo: false,
 };
 const $ = (id) => document.getElementById(id);
 
@@ -172,7 +172,16 @@ async function loadStats() {
 
 // ---------- resume ----------
 
+async function loadConfig() {
+  try { state.demo = (await api("/api/config")).demo; } catch { state.demo = false; }
+  document.body.classList.toggle("demo", state.demo);
+  if (state.demo) {
+    $("resume").innerHTML = '<div class="dim small">Read-only demo: CV upload, matching, cover letters and the tracker are switched off.</div>';
+  }
+}
+
 async function loadResume() {
+  if (state.demo) return;
   try {
     state.resume = await api("/api/resume");  // null when none uploaded
   } catch {
@@ -183,6 +192,7 @@ async function loadResume() {
 }
 
 function renderResume(msg = "") {
+  if (state.demo) return;
   const r = state.resume;
   const e = state.embeddings;
   const paused = e?.last_error?.includes("daily");
@@ -443,7 +453,7 @@ $("q").addEventListener("input", (e) => {
 
 $("more").addEventListener("click", () => loadJobs(true));
 
-loadResume().then(() => {
+loadConfig().then(loadResume).then(() => {
   if (state.resume) setSort("match");
   loadJobs();
 });

@@ -12,6 +12,14 @@ you filter them, rank them against your CV, track applications and draft cover l
  career pages ─┘   (daily)      (classify)                    (+ matching, cover letters)
 ```
 
+![The board: filters on the left, a dense list of student jobs with tags, summary and stack](docs/img/board.jpg)
+
+| Ranked against your CV | Cover letter from the job panel |
+|---|---|
+| ![Best match sort with match percentages](docs/img/best-match.jpg) | ![Job detail panel with a tailored cover letter](docs/img/cover-letter.jpg) |
+
+<sub>Screenshots use a sample CV ("Alex Example").</sub>
+
 ## Features
 
 - **~140 searches per run** across LinkedIn, Indeed, Glassdoor, Xing, StepStone, Jobware, Arbeitnow,
@@ -52,6 +60,13 @@ backend/.venv/bin/uvicorn app:app --app-dir backend --port 8000
 
 Open <http://localhost:8000>, upload your CV in the sidebar and switch the sort to **Best match**.
 
+## Public demo
+
+Run the backend with `DEMO_MODE=1` for a read-only board: browsing and filters work, while CV upload,
+matching, cover letters, tips and the tracker are switched off (no API key needed, nothing to abuse).
+`scripts/demo_data.py` exports a sample of recent jobs **without** their scraped descriptions and loads
+it into the demo database. See [operations](docs/operations.md#public-demo).
+
 ## Repository layout
 
 ```
@@ -64,6 +79,7 @@ scraper/      daily pipeline: scrape -> classify -> save (Python)
 backend/      FastAPI app: API, resume matching, cover letters; serves the frontend
 frontend/     plain HTML/CSS/JS board, no build step
 db/           schema (init.sql) and migrations
+scripts/      demo_data.py: sample dataset for a read-only demo
 docs/         architecture, configuration, API, operations
 ```
 

@@ -87,7 +87,26 @@ Enabling billing on the key removes most of this; raise `gemini.rpm` accordingly
 | Names like `KÃ¶ster` | encoding from pages without a charset; fixed in the scraper, old rows were repaired |
 | Ollama hangs | output is capped (`num_predict`) and timed out; if it still stalls, `ollama stop qwen2.5:3b` |
 
-## Legacy
+## Public demo
 
-`scraper/app.py` (Streamlit) and `scraper/import_csv.py` are from the first CSV-based version.
-The board in `frontend/` replaces the Streamlit app.
+A read-only demo is safer than hosting the real board: it doesn't republish scraped posting text and
+doesn't expose the Gemini-backed features.
+
+```bash
+# on your machine: export ~150 recent jobs (title, company, tags, link; no descriptions)
+backend/.venv/bin/python scripts/demo_data.py export 150      # -> db/demo_jobs.json (git-ignored)
+
+# on the demo host: fresh database from db/init.sql, then
+DATABASE_URL=postgresql://... backend/.venv/bin/python scripts/demo_data.py import
+DEMO_MODE=1 DATABASE_URL=postgresql://... backend/.venv/bin/uvicorn app:app --app-dir backend --port 8000
+```
+
+`DEMO_MODE=1` blocks every non-GET request to the resume, tracker and AI endpoints (403), turns off
+background embedding, and the frontend hides those controls and shows a demo note.
+
+### Recording a 1-2 minute video instead
+
+On macOS: QuickTime Player -> File -> New Screen Recording (or Cmd+Shift+5), record the browser window.
+A good flow: the board and filters (10 s) -> upload a sample CV and switch to Best match (20 s) ->
+open a job, Analyse fit, Write cover letter (40 s) -> set a status in the tracker (10 s). Use a sample
+CV rather than your real one if the video will be public.
