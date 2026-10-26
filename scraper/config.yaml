@@ -240,7 +240,7 @@ drop_fields: ["other"]                      # non-technical roles (sales, HR, ma
 
 # Jobs posted more than this many days ago are deleted at the start of every run
 # (jobs you track in the application tracker are kept)
-expire_days: 20
+expire_days: 7
 
 # ---------- LLM ----------
 # Gemini first (key in the repo's .env as GEMINI_API_KEY), models tried in order; Ollama is the

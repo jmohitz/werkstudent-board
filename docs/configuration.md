@@ -53,7 +53,7 @@ Changing `EMBED_MODEL` makes old vectors incomparable: clear `job_embeddings` an
 | `drop_categories` | `full_time`, `other` |
 | `drop_seniority` | `mid`, `senior` |
 | `drop_fields` | `other` (non-technical) |
-| `expire_days` | delete jobs posted longer ago than this at the start of each run (tracked jobs are kept) |
+| `expire_days` | delete jobs posted more than this many days ago (7) at the start of each run; tracked jobs are kept. Career-page jobs count from the day found, so an open role drops off and is found again |
 
 ### LLM
 

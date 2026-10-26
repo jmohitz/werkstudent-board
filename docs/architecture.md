@@ -12,7 +12,7 @@ Three parts share one Postgres database:
 
 `scraper/main.py` runs these steps:
 
-1. **Expire** jobs posted more than `expire_days` (20) ago, except jobs you track in the application tracker.
+1. **Expire** jobs posted more than `expire_days` (7) ago, except jobs you track in the application tracker.
 2. **Load known jobs** (URLs and title+company) from the database and CSV backups, so nothing is
    classified twice.
 3. **For each search** (`config.yaml` `searches`, then Arbeitsagentur-only searches, then the startup

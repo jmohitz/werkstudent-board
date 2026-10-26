@@ -24,7 +24,7 @@ you filter them, rank them against your CV, track applications and draft cover l
 - **Per-job help**: resume tips (fit, strengths, gaps, concrete CV edits) and a tailored cover letter in
   English or German, using only facts from your CV
 - **Application tracker**: saved / applied / interview / offer / rejected
-- **Housekeeping**: cross-site duplicates are merged, jobs older than 20 days expire (tracked ones stay)
+- **Housekeeping**: cross-site duplicates are merged, jobs older than 7 days expire (tracked ones stay)
 
 ## Quick start
 
