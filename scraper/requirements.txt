@@ -6,3 +6,5 @@ pyyaml
 tqdm
 streamlit
 psycopg[binary]
+google-genai
+python-dotenv

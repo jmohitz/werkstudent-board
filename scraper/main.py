@@ -1,8 +1,9 @@
-"""Daily pipeline: for each search term: scrape -> skip already-seen -> classify -> append to CSVs.
+"""Daily pipeline: expire old jobs, then for each search term:
+scrape -> skip already-seen -> title rules -> classify -> filter -> save (Postgres + CSV backup).
 
-Outputs (in output_dir):
+Outputs (in output_dir, a backup of what goes to the database):
   jobs_YYYY-MM-DD.csv  today's new, categorised jobs
-  all_jobs.csv         running history of everything (used by the frontend)
+  all_jobs.csv         running history
 """
 import argparse
 from datetime import date
@@ -13,23 +14,28 @@ import time
 
 import pandas as pd
 import yaml
-from tqdm import tqdm
+
+from dotenv import load_dotenv
 
 from classify import Classifier
 from scrape import dedupe, iter_searches, scrape_term
-from db import load_seen, save_jobs
+from db import delete_expired, load_seen, save_jobs
 
 BASE = Path(__file__).parent
 COLUMNS = [
-    "date_found", "category", "field", "relevance", "german_required", "title", "company",
-    "location", "site", "date_posted", "job_url", "job_url_direct", "reason", "search_term",
+    "date_found", "category", "seniority", "field", "german_required", "work_mode", "title",
+    "company", "location", "city", "site", "date_posted", "job_url", "job_url_direct",
+    "stack", "hours_per_week", "summary", "search_term", "classified_by", "description",
 ]
+load_dotenv(BASE.parent / ".env")  # GEMINI_API_KEY
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--hours-old", type=int,
                         help="only jobs posted within this many hours (overrides config.yaml for this run)")
+    parser.add_argument("--only", metavar="TEXT",
+                        help="only run search terms containing TEXT (case-insensitive), e.g. --only thesis")
     args = parser.parse_args()
 
     cfg = yaml.safe_load((BASE / "config.yaml").read_text(encoding="utf-8"))
@@ -51,7 +57,15 @@ def main():
 
     logger.info(f"Starting job scraper pipeline (jobs from the last {cfg['hours_old']}h)...")
 
+    try:
+        removed = delete_expired(cfg.get("expire_days", 20))
+        logger.info(f"Expired {removed} jobs older than {cfg.get('expire_days', 20)} days")
+    except Exception as e:
+        logger.warning(f"Could not expire old jobs: {e}")
+
     today_path = out_dir / f"jobs_{date.today().isoformat()}.csv"
+    for path in (all_path, today_path):
+        _rotate_if_old_format(path)
     clf = Classifier(cfg)
     reject = [re.compile(p, re.I) for p in cfg.get("reject_title_patterns", [])]
 
@@ -71,10 +85,13 @@ def main():
     logger.info(f"{len(seen_urls)} known jobs will be skipped")
 
     total = 0
-    for bucket, term in iter_searches(cfg):
+    searches = [(b, t, o) for b, t, o in iter_searches(cfg)
+                if not args.only or args.only.lower() in f"{b} {t}".lower()]
+    logger.info(f"{len(searches)} search terms")
+    for bucket, term, only in searches:
         logger.info(f"Searching: {bucket:16s} | term: {term}")
         try:
-            df = scrape_term(cfg, bucket, term)
+            df = scrape_term(cfg, bucket, term, only=only, skip_urls=seen_urls)
             if df.empty:
                 continue
             df = df[~df["job_url"].isin(seen_urls)]
@@ -93,17 +110,28 @@ def main():
             if df.empty:
                 continue
 
-            labels = [
-                clf.classify(r.title, r.company, r.location, r.description)
-                for r in tqdm(df.itertuples(), total=len(df), desc=f"classify '{term}'")
-            ]
+            t0 = time.monotonic()
+            labels = clf.classify_many(
+                [(r.title, r.company, r.location, r.description) for r in df.itertuples()]
+            )
+            logger.info(f"classified {len(df)} jobs in {time.monotonic() - t0:.0f}s ({clf.stats})")
             df = pd.concat([df, pd.DataFrame(labels)], axis=1)
             df["date_found"] = date.today().isoformat()
             seen_urls |= set(df["job_url"])
             seen_keys |= set(_key(df))
 
-            df = df[~df["category"].isin(cfg.get("drop_categories", []))]
-            df = df.reindex(columns=COLUMNS).sort_values("relevance", ascending=False)
+            drop = {
+                "category": df["category"].isin(cfg.get("drop_categories", [])),
+                "seniority": df["seniority"].isin(cfg.get("drop_seniority", [])),
+                # non-tech roles; keyword-fallback rows have no real field, so don't judge them by it
+                "field": df["field"].isin(cfg.get("drop_fields", [])) & (df["classified_by"] != "keyword"),
+            }
+            dropped = drop["category"] | drop["seniority"] | drop["field"]
+            if dropped.any():
+                why = ", ".join(f"{k} {int(v.sum())}" for k, v in drop.items() if v.any())
+                logger.info(f"dropped {int(dropped.sum())} ({why}; categories: "
+                            f"{df.loc[dropped, 'category'].value_counts().to_dict()})")
+            df = df[~dropped].reindex(columns=COLUMNS)
             # Saved immediately: a crash or rate limit later never loses finished searches
             for path in (today_path, all_path):
                 df.to_csv(path, mode="a", header=not path.exists(), index=False, encoding="utf-8-sig")
@@ -118,6 +146,16 @@ def main():
         time.sleep(cfg.get("sleep_between_searches", 5))
 
     logger.info(f"Pipeline finished: {total} new jobs -> {today_path}")
+
+
+def _rotate_if_old_format(path: Path):
+    """The CSV columns changed with the profile-free classifier; appending new rows under the old
+    header would misalign them, so an old-format file is renamed and a fresh one started."""
+    if not path.exists():
+        return
+    header = path.open(encoding="utf-8-sig").readline().strip().split(",")
+    if header != COLUMNS:
+        path.rename(path.with_name(f"{path.stem}.old-format{path.suffix}"))
 
 
 def _key(df: pd.DataFrame) -> pd.Series:

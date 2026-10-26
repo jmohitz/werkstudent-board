@@ -18,12 +18,78 @@ google: true              # Google Jobs via JobSpy (flaky; failures are skipped)
 arbeitsagentur:            # Bundesagentur fuer Arbeit Jobsuche API
   enabled: true
   location: "Deutschland"
-  fetch_details: true      # extra request per job for the full description
+  days: 7                  # own posting window: few new postings per term per day
+  size: 100                # results per search (API max 100)
+  fetch_details: true      # extra request per job for the full description (skipped for known jobs)
+  # Extra searches run only against the Arbeitsagentur, after the main terms. Its search works best
+  # with broad German terms (7-day counts when added: "Werkstudent IT" 59, "Praktikum IT" 46).
+  extra_searches:
+    - "Werkstudent IT"
+    - "Werkstudent Informatik"
+    - "Werkstudent Wirtschaftsinformatik"
+    - "Werkstudent Software"
+    - "Werkstudent Anwendungsentwicklung"
+    - "Werkstudent Datenanalyse"
+    - "Werkstudent Digitalisierung"
+    - "Werkstudent IT-Sicherheit"
+    - "Werkstudent Webentwicklung"
+    - "Werkstudent Data"
+    - "Praktikum IT"
+    - "Praktikum Informatik"
+    - "Praktikum Wirtschaftsinformatik"
+    - "Praktikum Data"
+    - "Praktikum Digitalisierung"
+    - "Praktikum Software"
+    - "Abschlussarbeit Informatik"
+    - "Abschlussarbeit IT"
+    - "Masterarbeit Data"
+    - "Studentische Hilfskraft Informatik"
 sleep_between_searches: 6  # seconds; be gentle to avoid rate limits
 
+# Startup career pages, read once per run from their applicant-tracking system's public feed.
+# Only student-looking titles (Werkstudent, intern, thesis...) in Germany/remote are kept.
+# To add a company: find its careers page and check which system serves it, e.g.
+#   greenhouse: boards-api.greenhouse.io/v1/boards/<slug>/jobs
+#   ashby:      api.ashbyhq.com/posting-api/job-board/<slug>
+#   lever:      api.lever.co/v0/postings/<slug>?mode=json
+#   personio:   <slug>.jobs.personio.de/xml
+# All entries below were checked to return jobs (student roles open when added in brackets).
+company_boards:
+  - {company: "1KOMMA5°", ats: personio, slug: 1komma5grad}          # [34]
+  - {company: "Enpal", ats: ashby, slug: enpal}                      # [20]
+  - {company: "Isar Aerospace", ats: greenhouse, slug: isaraerospace} # [10]
+  - {company: "Celonis", ats: greenhouse, slug: celonis}             # [8]
+  - {company: "SumUp", ats: greenhouse, slug: sumup}                 # [4]
+  - {company: "HelloFresh", ats: greenhouse, slug: hellofresh}       # [4]
+  - {company: "Raisin", ats: greenhouse, slug: raisin}               # [4]
+  - {company: "Helsing", ats: greenhouse, slug: helsing}             # [3]
+  - {company: "Parloa", ats: ashby, slug: parloa}                    # [2]
+  - {company: "GetYourGuide", ats: greenhouse, slug: getyourguide}   # [1]
+  - {company: "Babbel", ats: ashby, slug: babbel}                    # [1]
+  - {company: "tado°", ats: personio, slug: tado}                    # [1]
+  - {company: "Pliant", ats: ashby, slug: pliant}                    # [1]
+  - {company: "Solaris", ats: greenhouse, slug: solarisbank}         # [1]
+  - {company: "Agicap", ats: lever, slug: agicap}                    # [1]
+  - {company: "N26", ats: greenhouse, slug: n26}
+  - {company: "n8n", ats: ashby, slug: n8n}
+  - {company: "Langdock", ats: ashby, slug: langdock}
+  - {company: "DeepL", ats: ashby, slug: deepl}
+  - {company: "Aleph Alpha", ats: ashby, slug: alephalpha}
+  - {company: "Staffbase", ats: greenhouse, slug: staffbase}
+  - {company: "commercetools", ats: greenhouse, slug: commercetools}
+  - {company: "Flix", ats: greenhouse, slug: flix}
+  - {company: "Forto", ats: ashby, slug: forto}
+  - {company: "everphone", ats: personio, slug: everphone}
+  - {company: "Contentful", ats: greenhouse, slug: contentful}
+berlinstartupjobs: true    # official RSS feed (engineering); mostly full-time roles
+
 # Each bucket is a hint only; the LLM decides the final category.
+# Scope: Werkstudent, internship and thesis roles in Germany in software, data and AI/ML.
+# Every term costs ~1 min of scraping (all sources), so ~120 terms is a 1.5-2 h run;
+# already-seen jobs are skipped before the LLM, so classification stays small after the first run.
 searches:
   working_student:
+    # --- original terms ---
     - "Werkstudent Data"
     - "Werkstudent Data Engineering"
     - "Werkstudent Machine Learning"
@@ -36,7 +102,53 @@ searches:
     - "Werkstudent Java Entwickler"
     - "Werkstudent Backend Python"
     - "Werkstudent Cloud DevOps"
+    # --- software ---
+    - "Werkstudent Informatik"
+    - "Werkstudent Softwareentwicklung"
+    - "Werkstudent Backend"
+    - "Werkstudent Frontend"
+    - "Werkstudent Full Stack"
+    - "Werkstudent Webentwicklung"
+    - "Werkstudent App Entwicklung"
+    - "Werkstudent Python"
+    - "Werkstudent C++"
+    - "Werkstudent C# .NET"
+    - "Werkstudent TypeScript React"
+    - "Werkstudent Embedded Software"
+    - "Werkstudent Testautomatisierung"
+    - "Werkstudent SAP Entwicklung"
+    - "Werkstudent Wirtschaftsinformatik"
+    - "Working Student Backend"
+    - "Working Student Frontend"
+    - "Working Student Full Stack"
+    # --- data ---
+    - "Werkstudent Data Science"
+    - "Werkstudent Data Analytics"
+    - "Werkstudent Data Analyst"
+    - "Werkstudent Business Intelligence"
+    - "Werkstudent SQL Datenbanken"
+    - "Working Student Data Engineer"
+    - "Working Student Data Analyst"
+    # --- AI / ML ---
+    - "Werkstudent Künstliche Intelligenz"
+    - "Werkstudent Generative AI"
+    - "Werkstudent LLM"
+    - "Werkstudent Computer Vision"
+    - "Werkstudent NLP"
+    - "Werkstudent MLOps"
+    - "Werkstudent Deep Learning"
+    - "Werkstudent Robotik"
+    - "Working Student Machine Learning"
+    - "Working Student AI"
+    # --- infrastructure / security ---
+    - "Werkstudent DevOps"
+    - "Werkstudent Cloud"
+    - "Werkstudent IT Security"
+    - "Werkstudent Cybersecurity"
+    - "Working Student DevOps"
+    - "Working Student Cybersecurity"
   internship:
+    # --- original terms ---
     - "Praktikum Data Science"
     - "Praktikum Machine Learning"
     - "Internship Data Engineer"
@@ -46,7 +158,41 @@ searches:
     - "Praktikum AI Engineer"
     - "Praktikum Java Entwickler"
     - "Praktikum Backend Entwicklung"
+    # --- software ---
+    - "Praktikum Informatik"
+    - "Praktikum Softwareentwicklung"
+    - "Pflichtpraktikum Softwareentwicklung"
+    - "Praxissemester Informatik"
+    - "Praktikum Frontend"
+    - "Praktikum Full Stack"
+    - "Praktikum Webentwicklung"
+    - "Praktikum App Entwicklung"
+    - "Praktikum Embedded Software"
+    - "Praktikum SAP"
+    - "Praktikum Wirtschaftsinformatik"
+    - "Internship Backend"
+    - "Internship Frontend"
+    # --- data ---
+    - "Praktikum Data Engineering"
+    - "Praktikum Data Analytics"
+    - "Praktikum Business Intelligence"
+    - "Internship Data Science"
+    - "Internship Data Analyst"
+    # --- AI / ML ---
+    - "Praktikum Künstliche Intelligenz"
+    - "Praktikum KI"
+    - "Praktikum Computer Vision"
+    - "Praktikum Generative AI"
+    - "Internship Machine Learning"
+    - "Internship AI"
+    # --- infrastructure / security ---
+    - "Praktikum DevOps"
+    - "Praktikum Cloud"
+    - "Praktikum IT Security"
+    - "Internship DevOps"
+    - "Internship Cybersecurity"
   thesis:
+    # --- original terms ---
     - "Masterarbeit Data Science"
     - "Masterarbeit Machine Learning"
     - "Abschlussarbeit Informatik"
@@ -54,17 +200,75 @@ searches:
     - "Masterarbeit LLM"
     - "Masterarbeit Software Engineering"
     - "Masterarbeit Data Engineering"
+    # --- master ---
+    - "Masterarbeit Informatik"
+    - "Masterarbeit Künstliche Intelligenz"
+    - "Masterarbeit KI"
+    - "Masterarbeit Computer Vision"
+    - "Masterarbeit NLP"
+    - "Masterarbeit Deep Learning"
+    - "Masterarbeit Robotik"
+    - "Masterarbeit IT-Sicherheit"
+    - "Masterarbeit Embedded Systems"
+    - "Masterarbeit Cloud"
+    - "Masterarbeit Wirtschaftsinformatik"
+    - "Master thesis Machine Learning"
+    - "Master thesis Data Science"
+    - "Master thesis Computer Science"
+    # --- bachelor / general ---
+    - "Bachelorarbeit Informatik"
+    - "Bachelorarbeit Software Engineering"
+    - "Bachelorarbeit Data Science"
+    - "Bachelorarbeit Machine Learning"
+    - "Bachelorarbeit Wirtschaftsinformatik"
+    - "Bachelor thesis Computer Science"
+    - "Abschlussarbeit Machine Learning"
+    - "Abschlussarbeit Data Science"
+    - "Abschlussarbeit Softwareentwicklung"
 
 # Hard rules, checked on the TITLE before the LLM runs (case-insensitive regex). Matches are
 # rejected without an LLM call, which also saves time. Keep patterns specific.
 reject_title_patterns:
   - '\b(ausbildung|auszubildende[rn]?|azubi|schulpraktikum|schülerpraktikum|schuelerpraktikum|duales? studium)\b'
   - '\b(senior|lead|leiter(in)?|head of|principal|staff engineer|architect|architekt(in)?|director)\b'
+  - '\b(mid[- ]?level|medior|experienced|erfahrene[rn]?)\b'
 
-# Drop anything the LLM labels with these categories from the output
-drop_categories: ["full_time", "other"]
+# Drop anything the LLM labels with these values
+drop_categories: ["full_time", "other"]   # only Werkstudent / internship / thesis
+drop_seniority: ["mid", "senior"]          # entry and junior only
+drop_fields: ["other"]                      # non-technical roles (sales, HR, marketing...)
+
+# Jobs posted more than this many days ago are deleted at the start of every run
+# (jobs you track in the application tracker are kept)
+expire_days: 20
 
 # ---------- LLM ----------
+# Gemini first (key in the repo's .env as GEMINI_API_KEY), models tried in order; Ollama is the
+# fallback when every Gemini model is rate-limited, over quota or failing.
+gemini:
+  enabled: true
+  # Tried best-first. Free-tier quotas are PER MODEL, so several models together give ~50 jobs/min.
+  # Limits measured on this key (free tier): 3.8-flash 20/day, 3.5-flash 5/min,
+  # 3.5-flash-lite 15/min, 3.1-flash-lite 15/min, gemma-4-26b no limit hit at 30/min (but flaky).
+  models:
+    - gemini-3.8-flash
+    - gemini-3.5-flash
+    - gemini-3.5-flash-lite
+    - gemini-3.1-flash-lite
+    - gemma-4-26b-a4b-it
+  # requests per minute per model, kept just under the quotas above. Raise if you enable billing.
+  rpm:
+    gemini-3.8-flash: 5
+    gemini-3.5-flash: 4
+    gemini-3.5-flash-lite: 14
+    gemini-3.1-flash-lite: 14
+    gemma-4-26b-a4b-it: 14
+  max_workers: 8           # parallel requests
+  spill_after_s: 2         # if a model's next free slot is further away, use the next model
+  cooldown_s: 60           # skip a rate-limited / overloaded model this long
+  timeout_s: 30
+  max_description_chars: 4000
+
 ollama:
   host: "http://localhost:11434"
   model: "qwen2.5:3b"      # alternatives: qwen3:4b (slower, ~20 s/job), llama3.2:3b, qwen2.5:7b

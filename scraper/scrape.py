@@ -14,14 +14,26 @@ from jobspy import scrape_jobs
 
 logger = logging.getLogger("scrape")
 
-BA_BASE = "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4"
-BA_HEADERS = {"X-API-Key": "jobboerse-jobsuche"}  # public key used by the official Jobsuche site/app
+# Documented community API (https://github.com/bundesAPI/jobsuche-api) with its public client key.
+# Search moved to /pc/v6 in 2026 (the old /pc/v4/jobs route now answers 403 "No match found")
+# and renamed its fields; job details are still served by /pc/v4.
+BA_BASE = "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service"
+BA_HEADERS = {"X-API-Key": "jobboerse-jobsuche"}
 
 
 def iter_searches(cfg: dict):
+    """(bucket, term, only_sources). Arbeitsagentur-only terms come last."""
     for bucket, terms in cfg["searches"].items():
         for term in terms:
-            yield bucket, term
+            yield bucket, term, None
+    ba = cfg.get("arbeitsagentur", {})
+    if ba.get("enabled"):
+        for term in ba.get("extra_searches", []):
+            yield "arbeitsagentur", term, ["arbeitsagentur"]
+    if cfg.get("company_boards"):
+        yield "startups", "startup career pages", ["company_boards"]
+    if cfg.get("berlinstartupjobs", True):
+        yield "startups", "Berlin Startup Jobs feed", ["berlinstartupjobs"]
 
 
 def _jobspy(cfg: dict, term: str, sites: list[str], **extra) -> pd.DataFrame:
@@ -37,39 +49,43 @@ def _jobspy(cfg: dict, term: str, sites: list[str], **extra) -> pd.DataFrame:
     )
 
 
-def _arbeitsagentur(cfg: dict, term: str) -> pd.DataFrame:
+def _arbeitsagentur(cfg: dict, term: str, skip_urls: set = frozenset()) -> pd.DataFrame:
     ba = cfg.get("arbeitsagentur", {})
-    days = max(1, round(cfg["hours_old"] / 24))
+    # its own window: daily postings per search term are few, so look back further (default 7 days);
+    # jobs already on the board are skipped before the extra details request
+    days = ba.get("days") or max(1, round(cfg["hours_old"] / 24))
     r = requests.get(
-        f"{BA_BASE}/jobs",
+        f"{BA_BASE}/pc/v6/jobs",
         params={"was": term, "wo": ba.get("location", "Deutschland"), "veroeffentlichtseit": days,
-                "size": cfg["results_per_search"], "page": 1},
+                "size": min(ba.get("size", cfg["results_per_search"]), 100), "page": 1},
         headers=BA_HEADERS, timeout=30,
     )
     r.raise_for_status()
     rows = []
-    for j in r.json().get("stellenangebote", []):
-        refnr = j.get("refnr")
-        if not refnr:
+    for j in r.json().get("ergebnisliste", []):
+        ref = j.get("referenznummer")
+        if not ref or f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{ref}" in skip_urls:
             continue
-        desc = j.get("beruf", "")
+        desc, external = ", ".join(j.get("alleBerufe") or []), None
         if ba.get("fetch_details", True):
             try:
-                enc = base64.b64encode(refnr.encode()).decode()
-                d = requests.get(f"{BA_BASE}/jobdetails/{enc}", headers=BA_HEADERS, timeout=30)
+                enc = base64.b64encode(ref.encode()).decode()
+                d = requests.get(f"{BA_BASE}/pc/v4/jobdetails/{enc}", headers=BA_HEADERS, timeout=30)
                 d.raise_for_status()
-                desc = d.json().get("stellenbeschreibung") or desc
+                detail = d.json()
+                desc = _text(detail.get("stellenangebotsBeschreibung")) or desc
+                external = detail.get("externeURL")
             except Exception as e:
-                logger.debug(f"BA details failed for {refnr}: {e}")
-        ort = j.get("arbeitsort", {})
+                logger.debug(f"BA details failed for {ref}: {e}")
+        place = (j.get("stellenlokationen") or [{}])[0].get("adresse", {})
         rows.append({
-            "title": j.get("titel"),
-            "company": j.get("arbeitgeber"),
-            "location": ", ".join(x for x in (ort.get("ort"), ort.get("region")) if x),
+            "title": j.get("stellenangebotsTitel"),
+            "company": j.get("firma"),
+            "location": place.get("ort"),  # e.g. "Augsburg, Bayern"
             "site": "arbeitsagentur",
-            "date_posted": j.get("aktuelleVeroeffentlichungsdatum"),
-            "job_url": f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{refnr}",
-            "job_url_direct": j.get("externeUrl"),
+            "date_posted": (j.get("veroeffentlichungszeitraum") or {}).get("von") or j.get("datumErsteVeroeffentlichung"),
+            "job_url": f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{ref}",
+            "job_url_direct": external,
             "description": desc,
         })
     return pd.DataFrame(rows)
@@ -144,11 +160,19 @@ HTML_BOARDS = {
 }
 
 
+def _utf8(resp: requests.Response) -> requests.Response:
+    # requests assumes ISO-8859-1 for text/html without a charset header; these sites send UTF-8,
+    # so "Köster" would become "KÃ¶ster"
+    if (resp.encoding or "").lower() in ("iso-8859-1", "latin-1"):
+        resp.encoding = "utf-8"
+    return resp
+
+
 def _html_board(cfg: dict, name: str, term: str) -> pd.DataFrame:
     """Best-effort: read the search page, then each posting's schema.org JobPosting JSON-LD."""
     tmpl, pattern, prefix = HTML_BOARDS[name]
     slug = re.sub(r"[^a-z0-9]+", "-", term.lower()).strip("-")
-    r = requests.get(tmpl.format(slug=slug, q=quote_plus(term)), headers=WEB_HEADERS, timeout=30)
+    r = _utf8(requests.get(tmpl.format(slug=slug, q=quote_plus(term)), headers=WEB_HEADERS, timeout=30))
     r.raise_for_status()
     links = list(dict.fromkeys(html.unescape(l) for l in re.findall(pattern, r.text)))
     rows = []
@@ -156,7 +180,7 @@ def _html_board(cfg: dict, name: str, term: str) -> pd.DataFrame:
         url = prefix + link
         time.sleep(1)
         try:
-            p = requests.get(url, headers=WEB_HEADERS, timeout=30)
+            p = _utf8(requests.get(url, headers=WEB_HEADERS, timeout=30))
             p.raise_for_status()
         except Exception as e:
             logger.debug(f"[{name}] detail failed {url}: {e}")
@@ -178,8 +202,105 @@ def _html_board(cfg: dict, name: str, term: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def scrape_term(cfg: dict, bucket: str, term: str) -> pd.DataFrame:
-    """Run every configured source for one term. A failing source is logged and skipped."""
+# ---------- startup career pages (public applicant-tracking-system feeds) ----------
+# Many startups post Werkstudent/intern roles only on their own career page, which is usually served
+# by an ATS with an official public JSON/XML feed. Each feed lists ALL of a company's jobs, so only
+# student-looking titles in Germany (or remote) are kept before the LLM sees them.
+STUDENT_TITLE = re.compile(
+    r"werkstudent|working student|studentische|hiwi|intern\b|internship|praktik|pflichtpraktikum|"
+    r"praxissemester|thesis|abschlussarbeit|masterarbeit|bachelorarbeit|\bstudent\b", re.I)
+GERMANY = re.compile(
+    r"german|deutschland|\bde\b|berlin|m[uü]nchen|munich|hamburg|k[oö]ln|cologne|frankfurt|stuttgart|"
+    r"d[uü]sseldorf|leipzig|dresden|hannover|n[uü]rnberg|nuremberg|karlsruhe|bremen|essen|dortmund|"
+    r"bonn|mannheim|heidelberg|aachen|potsdam|ottobrunn|walldorf|remote", re.I)
+ATS_TIMEOUT = 30
+
+
+def _ats_greenhouse(slug):
+    r = requests.get(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true", timeout=ATS_TIMEOUT)
+    r.raise_for_status()
+    for j in r.json().get("jobs", []):
+        yield j["title"], (j.get("location") or {}).get("name", ""), j["absolute_url"], html.unescape(j.get("content", ""))
+
+
+def _ats_ashby(slug):
+    r = requests.get(f"https://api.ashbyhq.com/posting-api/job-board/{slug}", timeout=ATS_TIMEOUT)
+    r.raise_for_status()
+    for j in r.json().get("jobs", []):
+        if j.get("isListed") is False:
+            continue
+        country = ((j.get("address") or {}).get("postalAddress") or {}).get("addressCountry", "")
+        where = " ".join(x for x in (j.get("location"), country, "remote" if j.get("isRemote") else "") if x)
+        yield j["title"], where, j["jobUrl"], j.get("descriptionPlain") or ""
+
+
+def _ats_lever(slug):
+    r = requests.get(f"https://api.lever.co/v0/postings/{slug}?mode=json", timeout=ATS_TIMEOUT)
+    r.raise_for_status()
+    for j in r.json():
+        where = f"{(j.get('categories') or {}).get('location', '')} {j.get('country', '')}"
+        yield j["text"], where, j["hostedUrl"], j.get("descriptionPlain") or ""
+
+
+def _ats_personio(slug):
+    r = requests.get(f"https://{slug}.jobs.personio.de/xml", timeout=ATS_TIMEOUT)
+    r.raise_for_status()
+    for pos in re.findall(r"<position>(.*?)</position>", r.text, re.S):
+        tag = lambda t: html.unescape((re.search(rf"<{t}>(.*?)</{t}>", pos, re.S) or [None, ""])[1]).strip()
+        yield (tag("name"), tag("office"), f"https://{slug}.jobs.personio.de/job/{tag('id')}",
+               _text(" ".join(re.findall(r"<value>(.*?)</value>", pos, re.S))))
+
+
+ATS = {"greenhouse": _ats_greenhouse, "ashby": _ats_ashby, "lever": _ats_lever, "personio": _ats_personio}
+
+
+def _company_boards(cfg: dict, skip_urls: set = frozenset()) -> pd.DataFrame:
+    rows, failed = [], []
+    for b in cfg.get("company_boards", []):
+        try:
+            for title, where, url, desc in ATS[b["ats"]](b["slug"]):
+                if url in skip_urls or not STUDENT_TITLE.search(title or ""):
+                    continue
+                if where and not GERMANY.search(where):
+                    continue
+                rows.append({
+                    "title": html.unescape(title), "company": b["company"], "location": where,
+                    "site": f"careers:{b['ats']}",
+                    # career pages keep roles open for months and their publish dates would expire them
+                    # at once; use the date found (an open role is simply found again after expiry)
+                    "date_posted": None,
+                    "job_url": url, "job_url_direct": url, "description": _text(desc),
+                })
+        except Exception as e:
+            failed.append(f"{b['company']} ({e.__class__.__name__})")
+        time.sleep(0.5)
+    if failed:
+        logger.warning(f"[company_boards] skipped: {', '.join(failed)}")
+    return pd.DataFrame(rows)
+
+
+def _berlinstartupjobs(cfg: dict) -> pd.DataFrame:
+    """Official RSS feed of the engineering category. Mostly full-time roles; the LLM drops those."""
+    r = requests.get("https://berlinstartupjobs.com/engineering/feed/", headers=WEB_HEADERS, timeout=30)
+    r.raise_for_status()  # 403 = they refuse automated access right now: skipped, not worked around
+    rows = []
+    for item in re.findall(r"<item>(.*?)</item>", r.text, re.S):
+        tag = lambda t: html.unescape(re.sub(r"<!\[CDATA\[|\]\]>", "", (re.search(rf"<{t}>(.*?)</{t}>", item, re.S) or [None, ""])[1])).strip()
+        title = tag("title")  # "Role // Company"
+        role, _, company = title.partition(" // ")
+        rows.append({
+            "title": role or title, "company": company or None, "location": "Berlin", "site": "berlinstartupjobs",
+            "date_posted": pd.to_datetime(tag("pubDate"), errors="coerce").date().isoformat() if tag("pubDate") else None,
+            "job_url": tag("link"), "job_url_direct": None, "description": _text(tag("description")),
+        })
+    return pd.DataFrame(rows)
+
+
+def scrape_term(cfg: dict, bucket: str, term: str, only: list[str] | None = None,
+                skip_urls: set = frozenset()) -> pd.DataFrame:
+    """Run every configured source for one term (or just the sources in `only`).
+    A failing source is logged and skipped. `skip_urls`: known jobs, so sources that need an
+    extra request per job (Arbeitsagentur details) can skip them early."""
     frames = []
     sources = {}
     if cfg.get("sites"):
@@ -188,7 +309,7 @@ def scrape_term(cfg: dict, bucket: str, term: str) -> pd.DataFrame:
         sources["google"] = lambda: _jobspy(
             cfg, term, ["google"], google_search_term=f"{term} jobs in {cfg['location']} since yesterday")
     if cfg.get("arbeitsagentur", {}).get("enabled", False):
-        sources["arbeitsagentur"] = lambda: _arbeitsagentur(cfg, term)
+        sources["arbeitsagentur"] = lambda: _arbeitsagentur(cfg, term, skip_urls)
     for board in cfg.get("extra_sites", []):
         if board == "arbeitnow":
             sources[board] = lambda: _arbeitnow(cfg, term)
@@ -196,6 +317,13 @@ def scrape_term(cfg: dict, bucket: str, term: str) -> pd.DataFrame:
             sources[board] = lambda b=board: _html_board(cfg, b, term)
         else:
             logger.warning(f"unknown extra site '{board}'")
+    if only:
+        sources = {k: v for k, v in sources.items() if k in only}
+        # term-independent sources: run once per scrape, only when asked for explicitly
+        if "company_boards" in only and cfg.get("company_boards"):
+            sources["company_boards"] = lambda: _company_boards(cfg, skip_urls)
+        if "berlinstartupjobs" in only:
+            sources["berlinstartupjobs"] = lambda: _berlinstartupjobs(cfg)
 
     for name, fn in sources.items():
         try:
