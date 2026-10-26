@@ -67,8 +67,6 @@ Changing `EMBED_MODEL` makes old vectors incomparable: clear `job_embeddings` an
 | `gemini.timeout_s`, `gemini.max_description_chars` | request timeout, description length sent |
 | `ollama.host`, `ollama.model` | local fallback (`qwen2.5:3b`) |
 
-`profile` is no longer used: classification is profile-free and matching uses the uploaded CV.
-
 Free-tier limits measured on our key (Oct 2026): 3.8-flash 20 requests/day, 3.5-flash 5/min,
 3.5-flash-lite and 3.1-flash-lite 15/min, gemma-4-26b no limit hit at 30/min; embeddings
 100 texts/min, 30,000 tokens/min, 1,000 requests/day.

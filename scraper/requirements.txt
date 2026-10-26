@@ -4,7 +4,6 @@ pydantic>=2
 pandas
 pyyaml
 tqdm
-streamlit
 psycopg[binary]
 google-genai
 python-dotenv
