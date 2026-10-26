@@ -153,7 +153,9 @@ def _microdata(page: str) -> dict | None:
 
 # name -> (listing URL template, regex for posting links, URL prefix for relative links)
 HTML_BOARDS = {
-    "stepstone": ("https://www.stepstone.de/jobs/{slug}", r'href="(/stellenangebote--[^"#]+)"', "https://www.stepstone.de"),
+    # links were relative until 2026, now absolute; accept both
+    "stepstone": ("https://www.stepstone.de/jobs/{slug}",
+                  r'href="(?:https://www\.stepstone\.de)?(/stellenangebote--[^"#]+)"', "https://www.stepstone.de"),
     "xing": ("https://www.xing.com/jobs/search?keywords={q}", r'href="(/jobs/[a-z0-9-]+-\d{6,}[^"#]*)"', "https://www.xing.com"),
     "fraunhofer": ("https://jobs.fraunhofer.de/search/?q={q}", r'href="(/job/[^"#]+)"', "https://jobs.fraunhofer.de"),
     "jobware": ("https://www.jobware.de/jobsuche?jw_jobname={q}", r'href="(/job/[^"#]+)"', "https://www.jobware.de"),
