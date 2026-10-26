@@ -18,9 +18,20 @@
         <div class="dim">jobs on the board</div>
       </div>
 
+      <div class="block" id="resume-block">
+        <div class="label">Resume</div>
+        <div id="resume"></div>
+        <input type="file" id="resume-file" accept=".pdf,.txt,.md" hidden>
+      </div>
+
+      <div class="block">
+        <div class="label">My applications</div>
+        <ul class="cats" id="status"></ul>
+      </div>
+
       <div class="block">
         <div class="label">Category</div>
-        <ul class="cats" id="cats"></ul>
+        <ul class="cats" id="category"></ul>
       </div>
 
       <div class="block">
@@ -29,25 +40,47 @@
       </div>
 
       <div class="block">
-        <label class="label" for="minrel">Min relevance</label>
-        <select id="minrel">
-          <option value="0">any</option>
-          <option value="3">3+</option>
-          <option value="4" selected>4+</option>
-          <option value="5">5 only</option>
-        </select>
+        <div class="label">Field</div>
+        <ul class="cats" id="field"></ul>
+      </div>
+
+      <div class="block">
+        <div class="label">Source</div>
+        <ul class="cats" id="site"></ul>
+      </div>
+
+      <div class="block">
+        <div class="label">Work mode</div>
+        <ul class="cats" id="work_mode"></ul>
+      </div>
+
+      <div class="block">
+        <label class="check"><input type="checkbox" id="english"> Hide German required</label>
       </div>
     </aside>
 
     <main class="main">
       <div class="panel-head">
-        <input id="q" type="search" placeholder="Quick search title or company…" autocomplete="off">
+        <input id="q" type="search" placeholder="Search title, company, stack…" autocomplete="off">
+        <span class="sort" role="group" aria-label="Sort">
+          <button data-sort="newest" aria-pressed="true">Newest</button>
+          <button data-sort="match" aria-pressed="false" title="Upload your resume to rank jobs">Best match</button>
+        </span>
         <span class="dim" id="count"></span>
       </div>
       <ol class="jobs" id="jobs"></ol>
       <button class="more" id="more" hidden>Load more</button>
     </main>
   </div>
+
+  <div class="backdrop" id="backdrop" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Job details">
+    <div class="drawer-head">
+      <span class="dim">~/job</span>
+      <button class="icon" id="drawer-close" aria-label="Close">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
 
   <script src="app.js"></script>
 </body>
