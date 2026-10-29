@@ -1,0 +1,18 @@
+version: 2
+
+# A source declares a table dbt did NOT create (the scraper writes it).
+# Models refer to it with {{ source('app', 'jobs') }} instead of a hard-coded name,
+# so dbt knows the lineage and can check freshness.
+sources:
+  - name: app
+    schema: public
+    tables:
+      - name: jobs
+        description: One row per job posting, written by the scraper.
+        # `dbt source freshness` warns if the scraper hasn't added anything recently.
+        loaded_at_field: created_at
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 4, period: day}
+      - name: applications
+        description: The application tracker (one row per tracked job).

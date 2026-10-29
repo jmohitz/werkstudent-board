@@ -25,7 +25,7 @@ const FIELD = {
 const MODE = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site", unclear: "Not stated" };
 const SITE = {
   linkedin: "LinkedIn", indeed: "Indeed", glassdoor: "Glassdoor", xing: "Xing", stepstone: "StepStone",
-  jobware: "Jobware", arbeitnow: "Arbeitnow", arbeitsagentur: "Arbeitsagentur", fraunhofer: "Fraunhofer",
+  jobware: "Jobware", arbeitnow: "Arbeitnow", jooble: "Jooble", arbeitsagentur: "Arbeitsagentur", fraunhofer: "Fraunhofer",
   berlinstartupjobs: "Berlin Startup Jobs", careers: "Startup career pages", google: "Google",
 };
 const STATUS = { saved: "Saved", applied: "Applied", interview: "Interview", offer: "Offer", rejected: "Rejected" };

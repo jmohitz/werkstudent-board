@@ -32,6 +32,8 @@ a:hover { text-decoration: underline; }
 }
 .brand { font-weight: 700; }
 .path { font-weight: 400; }
+.toplink { color: var(--dim); text-decoration: none; font-size: 12px; }
+.toplink:hover { color: var(--link); }
 
 .layout {
   display: grid;

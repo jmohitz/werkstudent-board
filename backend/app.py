@@ -173,6 +173,26 @@ def job_detail(job_id: int):
     return job
 
 
+@app.get("/api/insights")
+def insights():
+    """Read-only views of the dbt marts (analytics/). 404 until `dbt build` has run once."""
+    try:
+        return {
+            "daily": query("SELECT day, category, jobs, english_friendly_jobs, remote_jobs "
+                           "FROM analytics_marts.mart_jobs_daily WHERE day >= current_date - 30 ORDER BY day"),
+            "skills": query("SELECT skill, jobs, working_student_jobs, internship_jobs, thesis_jobs, pct_of_jobs "
+                            "FROM analytics_marts.mart_skills_demand ORDER BY jobs DESC LIMIT 25"),
+            "companies": query("SELECT company, open_jobs, working_student_jobs, internship_jobs, thesis_jobs, "
+                               "applied FROM analytics_marts.mart_companies ORDER BY open_jobs DESC LIMIT 20"),
+            "sources": query("SELECT * FROM analytics_marts.mart_sources ORDER BY jobs DESC"),
+            "history": query("SELECT posted_month, category, count(*) AS jobs, "
+                             "count(*) FILTER (WHERE NOT is_active) AS expired "
+                             "FROM analytics_marts.mart_jobs_history GROUP BY 1, 2 ORDER BY 1, 2"),
+        }
+    except Exception as e:  # marts not built yet
+        raise HTTPException(404, f"Run `dbt build` in analytics/ first ({type(e).__name__})")
+
+
 @app.get("/api/stats")
 def stats():
     def group(col: str) -> list[dict]:

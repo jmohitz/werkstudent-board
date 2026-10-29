@@ -1,0 +1,60 @@
+version: 2
+
+# Docs + tests for the staging models. Every `description` shows up in `dbt docs`;
+# every entry under `data_tests` becomes a SQL query that must return 0 rows to pass.
+models:
+  - name: stg_jobs
+    description: One row per job posting, cleaned from public.jobs.
+    columns:
+      - name: job_id
+        description: Primary key.
+        data_tests: [unique, not_null]
+      - name: title
+        data_tests: [not_null]
+      - name: source
+        description: Where the job was scraped from (linkedin, xing, arbeitsagentur, ...).
+        data_tests: [not_null]
+      - name: category
+        description: Set by the classifier; anything else is dropped before saving.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [working_student, internship, thesis]
+      - name: seniority
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [entry, junior]   # nulls are allowed: keyword-classified rows have none
+      - name: work_mode
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [remote, hybrid, onsite, unclear]
+      - name: classifier
+        description: gemini, ollama, keyword, or unknown (classified before this was recorded).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [gemini, ollama, keyword, unknown]
+      - name: posted_on
+        description: The posting date if known, else the day the scraper found the job.
+        data_tests: [not_null]
+
+  - name: stg_applications
+    description: The application tracker; one row per tracked job.
+    columns:
+      - name: job_id
+        data_tests:
+          - unique
+          - not_null
+          # foreign key check: every tracked job must exist in stg_jobs
+          - relationships:
+              arguments:
+                to: ref('stg_jobs')
+                field: job_id
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [saved, applied, interview, offer, rejected]

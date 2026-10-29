@@ -9,6 +9,7 @@ cd scraper
 .venv/bin/python main.py --only thesis          # only searches containing "thesis"
 .venv/bin/python main.py --only startups        # only the startup career pages + Berlin Startup Jobs
 .venv/bin/python main.py --only arbeitsagentur  # only the Arbeitsagentur extra searches
+.venv/bin/python main.py --sources stepstone      # all terms, but only the listed sources (comma-separated)
 ```
 
 A full run takes about 3-5 hours, mostly scraping (each term is searched on every source with polite
@@ -51,7 +52,8 @@ cron skips runs while the Mac sleeps; launchd catches up after wake. Save as
 </dict></plist>
 ```
 
-Docker (the database) must be running at that time.
+Docker (the database) must be running at that time. To keep the dbt history and insights current,
+run `dbt snapshot && dbt build` in `analytics/` after the scrape (see [analytics/README.md](../analytics/README.md)).
 
 ## Database migrations
 

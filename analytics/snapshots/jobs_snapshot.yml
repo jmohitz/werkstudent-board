@@ -1,0 +1,16 @@
+snapshots:
+  # A snapshot remembers history the source table forgets. Each `dbt snapshot` compares
+  # the current jobs with the last recorded version (SCD Type 2):
+  #   new job                -> new row, dbt_valid_from = now, dbt_valid_to = null (current)
+  #   checked column changed -> old row closed (dbt_valid_to = now), new row opened
+  #   job deleted (expired)  -> old row closed and a row with dbt_is_deleted = true added
+  # So jobs survive the scraper's 7-day expiry here, and we can count jobs per month later.
+  - name: jobs_snapshot
+    relation: ref('stg_jobs')
+    description: Full history of every job the board has ever had.
+    config:
+      schema: snapshots
+      unique_key: job_id
+      strategy: check          # no reliable updated_at column, so compare these columns
+      check_cols: [category, field, seniority, work_mode, german_required]
+      hard_deletes: new_record # record expiries instead of losing the job

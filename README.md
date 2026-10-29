@@ -23,7 +23,7 @@ you filter them, rank them against your CV, track applications and draft cover l
 ## Features
 
 - **~140 searches per run** across LinkedIn, Indeed, Glassdoor, Xing, StepStone, Jobware, Arbeitnow,
-  Fraunhofer, the Arbeitsagentur, 26 startup career pages and Berlin Startup Jobs
+  Jooble, Fraunhofer, the Arbeitsagentur, 26 startup career pages and Berlin Startup Jobs
 - **Profile-free classification** with Gemini (several models, each kept under its free quota), local
   Ollama as fallback; full-time, mid/senior and non-technical roles are dropped
 - **Board** in a dense, dark, foorilla-style UI: filters for category, posting date, field, source,
@@ -32,6 +32,8 @@ you filter them, rank them against your CV, track applications and draft cover l
 - **Per-job help**: resume tips (fit, strengths, gaps, concrete CV edits) and a tailored cover letter in
   English or German, using only facts from your CV
 - **Application tracker**: saved / applied / interview / offer / rejected
+- **Analytics with dbt**: tested staging/mart models, a snapshot that keeps job history past the
+  7-day expiry, and an insights page (jobs per day, skills in demand, top companies, source quality)
 - **Housekeeping**: cross-site duplicates are merged, jobs older than 7 days expire (tracked ones stay)
 
 ## Quick start
@@ -77,7 +79,8 @@ scraper/      daily pipeline: scrape -> classify -> save (Python)
   db.py         Postgres writes, expiry
   config.yaml   search terms, sources, models, filters
 backend/      FastAPI app: API, resume matching, cover letters; serves the frontend
-frontend/     plain HTML/CSS/JS board, no build step
+frontend/     plain HTML/CSS/JS board and insights page, no build step
+analytics/    dbt project: staging, marts, snapshot, tests (see analytics/README.md)
 db/           schema (init.sql) and migrations
 scripts/      demo_data.py: sample dataset for a read-only demo
 docs/         architecture, configuration, API, operations
@@ -89,6 +92,7 @@ docs/         architecture, configuration, API, operations
 - [Configuration](docs/configuration.md): every setting in `scraper/config.yaml` and the environment
 - [API](docs/api.md): the HTTP endpoints the frontend uses
 - [Operations](docs/operations.md): daily runs, quotas, migrations, troubleshooting
+- [Analytics](analytics/README.md): the dbt project behind the insights page
 
 ## Notes
 

@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: mart_jobs_daily
+    description: Jobs per day and category; one row per (day, category).
+    data_tests:
+      # the grain test: no day/category pair may appear twice
+      - unique:
+          arguments:
+            column_name: "day || '|' || category"
+    columns:
+      - name: jobs
+        data_tests: [not_null]
+
+  - name: mart_skills_demand
+    description: Skills from the classifier's `stack`, case-insensitive, most requested first.
+    columns:
+      - name: skill_key
+        data_tests: [unique, not_null]
+
+  - name: mart_companies
+    description: One row per company with open roles and tracker progress.
+    columns:
+      - name: company
+        data_tests: [unique, not_null]
+
+  - name: mart_jobs_history
+    description: Every job ever seen (from the snapshot), with first_seen and expired_on.
+    columns:
+      - name: job_id
+        data_tests: [unique, not_null]
+
+  - name: mart_sources
+    description: Volume, freshness and data quality per source.
+    columns:
+      - name: source
+        data_tests: [unique, not_null]

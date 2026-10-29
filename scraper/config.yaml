@@ -9,10 +9,11 @@ sites: ["indeed", "linkedin", "glassdoor"]
 hours_old: 26              # a bit more than 24h so a late run doesn't miss anything
 results_per_search: 40     # per search term per site
 linkedin_fetch_description: true   # slower, but gives the LLM much better input
-# Extra boards: arbeitnow (public API); stepstone / xing / jobware / fraunhofer (research)
+# Extra boards: arbeitnow, jooble (APIs; jooble needs JOOBLE_API_KEY); stepstone / xing / jobware / fraunhofer (research)
 # are best-effort HTML scraping.
 # jobvector.de is behind a Cloudflare challenge, dfki.de too (Cloudflare); are not supported.
-extra_sites: ["arbeitnow", "stepstone", "xing", "jobware", "fraunhofer"]
+extra_sites: ["arbeitnow", "jooble", "stepstone", "xing", "jobware", "fraunhofer"]
+jooble_max_requests: 20   # the free Jooble key has 500 requests in total; this many per run (first terms)
 html_board_max_jobs: 15    # postings fetched per term per HTML board
 google: true              # Google Jobs via JobSpy (flaky; failures are skipped)
 arbeitsagentur:            # Bundesagentur fuer Arbeit Jobsuche API

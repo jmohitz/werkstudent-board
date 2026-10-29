@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Board Insights</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .insights { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+                grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+    .card { background: var(--panel); border: 1px solid var(--line); padding: 14px; min-width: 0; }
+    .card h2 { font-size: 13px; margin: 0 0 4px; color: var(--link); }
+    .card .dim { font-size: 12px; margin-bottom: 10px; }
+    .bars { display: grid; grid-template-columns: minmax(0, 9em) 1fr auto; gap: 4px 8px;
+            font-size: 12px; align-items: center; }
+    .bars .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar { height: 10px; display: flex; background: var(--line); }
+    .bar span { display: block; height: 100%; }
+    .ws { background: var(--blue); } .in { background: var(--green); } .th { background: var(--purple); }
+    .legend { font-size: 12px; display: flex; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; }
+    .days { display: flex; align-items: flex-end; gap: 2px; height: 120px; }
+    .days > div { flex: 1; display: flex; flex-direction: column-reverse; min-width: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--dim); font-weight: normal; }
+    .scroll { overflow-x: auto; }
+    .wide { grid-column: 1 / -1; }
+    #error { color: var(--red); padding: 16px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">wsb<span class="dim">:</span> <span class="path">~/insights</span></span>
+    <a class="toplink" href="/">← board</a>
+  </header>
+  <div id="error"></div>
+  <main class="insights" id="main"></main>
+
+<script>
+const CATS = [["working_student", "ws", "Werkstudent"], ["internship", "in", "Internship"], ["thesis", "th", "Thesis"]];
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const legend = `<div class="legend">${CATS.map(([, c, l]) => `<span><i class="${c}"></i>${l}</span>`).join("")}</div>`;
+
+// one horizontal bar split by category
+function stacked(rows, label, max) {
+  return `<div class="bars">${rows.map((r) => `
+    <span class="name" title="${esc(r[label])}">${esc(r[label])}</span>
+    <div class="bar">${CATS.map(([k, c]) => `<span class="${c}" style="width:${100 * r[k + "_jobs"] / max}%"></span>`).join("")}</div>
+    <span class="dim">${r.jobs ?? r.open_jobs}</span>`).join("")}</div>`;
+}
+
+function card(title, note, body, wide = false) {
+  return `<section class="card${wide ? " wide" : ""}"><h2>${title}</h2><div class="dim">${note}</div>${body}</section>`;
+}
+
+function daily(rows) {
+  const days = {};
+  for (const r of rows) (days[r.day] ??= {})[r.category] = r.jobs;
+  const keys = Object.keys(days).sort();
+  const max = Math.max(1, ...keys.map((d) => Object.values(days[d]).reduce((a, b) => a + b, 0)));
+  return legend + `<div class="days">${keys.map((d) => `<div title="${d}">${CATS.map(([k, c]) =>
+    `<span class="${c}" style="height:${120 * (days[d][k] || 0) / max}px"></span>`).join("")}</div>`).join("")}</div>
+    <div class="dim" style="display:flex;justify-content:space-between"><span>${keys[0] ?? ""}</span><span>${keys.at(-1) ?? ""}</span></div>`;
+}
+
+function table(rows, cols) {
+  return `<div class="scroll"><table><tr>${cols.map(([, h]) => `<th>${h}</th>`).join("")}</tr>${rows.map((r) =>
+    `<tr>${cols.map(([k]) => `<td>${esc(r[k] ?? "–")}</td>`).join("")}</tr>`).join("")}</table></div>`;
+}
+
+fetch("/api/insights").then(async (res) => {
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.detail);
+  const total = (rows) => rows.reduce((a, r) => a + r.jobs, 0);
+  document.getElementById("main").innerHTML = [
+    card("New jobs per day", "last 30 days, by posting date (else the day found)", daily(d.daily), true),
+    card("Skills in demand", "from the classifier's stack; share of jobs that list any skill",
+         legend + stacked(d.skills, "skill", d.skills[0]?.jobs || 1)),
+    card("Top hiring companies", "open roles right now",
+         legend + stacked(d.companies, "company", d.companies[0]?.open_jobs || 1)),
+    card("Sources", "which boards are worth scraping", table(d.sources, [
+      ["source", "source"], ["jobs", "jobs"], ["pct_of_board", "% board"], ["jobs_last_2_days", "last 2d"],
+      ["pct_english_friendly", "% english"], ["pct_gemini_classified", "% gemini"]]), true),
+    card("History", `${total(d.history)} jobs ever seen (dbt snapshot); expired ones are kept`, table(d.history, [
+      ["posted_month", "month"], ["category", "category"], ["jobs", "jobs"], ["expired", "expired"]]), true),
+  ].join("");
+}).catch((e) => { document.getElementById("error").textContent = e.message; });
+</script>
+</body>
+</html>

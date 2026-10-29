@@ -33,7 +33,9 @@ Three parts share one Postgres database:
 | Google Jobs | JobSpy | currently returns nothing; kept, failures are skipped |
 | Arbeitsagentur | documented public Jobsuche API (`/pc/v6/jobs`, details via `/pc/v4/jobdetails`) | own 7-day window + 20 broad German extra searches |
 | Arbeitnow | public JSON API | |
-| StepStone, Xing, Jobware, Fraunhofer | search page + each posting's schema.org `JobPosting` data (JSON-LD or microdata) | best-effort HTML; max 15 postings per term |
+| Jooble | official REST API (`JOOBLE_API_KEY`) | short snippets only; the free key has 500 requests in total, capped per run |
+| StepStone | the search page's embedded result JSON (title, company, date, snippet) | posting pages time out for scripts, so they aren't fetched |
+| Xing, Jobware, Fraunhofer | search page + each posting's schema.org `JobPosting` data (JSON-LD or microdata) | best-effort HTML; max 15 postings per term |
 | Startup career pages | public ATS feeds: Greenhouse, Ashby, Lever, Personio | 26 companies; only student titles in Germany/remote are kept |
 | Berlin Startup Jobs | official RSS feed (engineering) | mostly full-time, filtered out later |
 
@@ -90,5 +92,6 @@ string), and a clear title ("Werkstudent ...") overrides a model that says full-
 
 ## Frontend (`frontend/`)
 
-No framework and no build step. `app.js` keeps the filter state, calls `/api/jobs` and `/api/stats`,
+No framework and no build step. `insights.html` reads `/api/insights`, which selects from the dbt
+marts (see [analytics/README.md](../analytics/README.md)). `app.js` keeps the filter state, calls `/api/jobs` and `/api/stats`,
 renders the list, the sidebar filters, the resume block and the job detail panel.

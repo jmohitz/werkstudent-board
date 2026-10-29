@@ -36,6 +36,10 @@ def main():
                         help="only jobs posted within this many hours (overrides config.yaml for this run)")
     parser.add_argument("--only", metavar="TEXT",
                         help="only run search terms containing TEXT (case-insensitive), e.g. --only thesis")
+    parser.add_argument("--sources", metavar="LIST",
+                        help="only these sources, comma-separated, e.g. --sources stepstone,xing "
+                             "(names: jobspy, google, arbeitsagentur, extra_sites entries, company_boards, "
+                             "berlinstartupjobs)")
     args = parser.parse_args()
 
     cfg = yaml.safe_load((BASE / "config.yaml").read_text(encoding="utf-8"))
@@ -87,6 +91,10 @@ def main():
     total = 0
     searches = [(b, t, o) for b, t, o in iter_searches(cfg)
                 if not args.only or args.only.lower() in f"{b} {t}".lower()]
+    if args.sources:
+        wanted = [s.strip() for s in args.sources.split(",") if s.strip()]
+        searches = [(b, t, [s for s in (o or wanted) if s in wanted]) for b, t, o in searches]
+        searches = [(b, t, o) for b, t, o in searches if o]
     logger.info(f"{len(searches)} search terms")
     for bucket, term, only in searches:
         logger.info(f"Searching: {bucket:16s} | term: {term}")

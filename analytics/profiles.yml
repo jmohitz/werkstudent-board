@@ -1,0 +1,15 @@
+# Connection settings. Usually this lives in ~/.dbt/, but keeping it here (run with
+# --profiles-dir . or DBT_PROFILES_DIR=.) keeps the project self-contained.
+# Credentials come from env vars with the local Docker defaults as fallback.
+werkstudent_board:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'localhost') }}"
+      port: 5432
+      user: "{{ env_var('DBT_USER', 'board') }}"
+      password: "{{ env_var('DBT_PASSWORD', 'board') }}"
+      dbname: board
+      schema: analytics   # base schema; folders append to it (analytics_staging, analytics_marts)
+      threads: 4

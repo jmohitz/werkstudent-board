@@ -6,6 +6,7 @@
 |---|---|---|
 | `GEMINI_API_KEY` | scraper, backend | required for Gemini; without it the scraper uses Ollama only |
 | `DATABASE_URL` | scraper, backend | `postgresql://board:board@localhost:5432/board` |
+| `JOOBLE_API_KEY` | scraper | optional; enables the Jooble source |
 | `GEN_MODELS` | backend | `gemini-3.8-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite` (cover letters, tips, CV parsing) |
 | `EMBED_MODEL` | backend | `gemini-embedding-001` |
 
@@ -22,7 +23,8 @@ Changing `EMBED_MODEL` makes old vectors incomparable: clear `job_embeddings` an
 | `hours_old` | only postings from the last N hours (26 = daily run with some slack). `main.py --hours-old` overrides it for one run |
 | `results_per_search` | results per term per JobSpy site |
 | `linkedin_fetch_description` | fetch full LinkedIn descriptions (slower, much better classification) |
-| `extra_sites` | `arbeitnow`, `stepstone`, `xing`, `jobware`, `fraunhofer` |
+| `jooble_max_requests` | Jooble API calls per run (20); the free key has 500 in total |
+| `extra_sites` | `arbeitnow`, `jooble` (needs `JOOBLE_API_KEY`), `stepstone`, `xing`, `jobware`, `fraunhofer` |
 | `html_board_max_jobs` | postings fetched per term per HTML board |
 | `google` | Google Jobs via JobSpy |
 | `sleep_between_searches` | seconds between terms |

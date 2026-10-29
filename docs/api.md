@@ -33,6 +33,11 @@ One job including `description`, `job_url_direct`, `match` and `posting_language
 Counts for the sidebar: `total`, `by_category`, `by_field`, `by_work_mode`, `by_site`, `by_posted`,
 `by_status`, and `embeddings` (`embedded`, `total`, `last_error`).
 
+### `GET /api/insights`
+
+Rows from the dbt marts: `daily` (last 30 days), `skills` (top 25), `companies` (top 20), `sources`,
+`history` (per month and category, from the snapshot). `404` until `dbt build` has run once.
+
 ## Application tracker
 
 - `PUT /api/applications/{job_id}` with `{"status": "saved|applied|interview|offer|rejected", "notes": "..."}`

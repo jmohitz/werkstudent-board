@@ -3,6 +3,7 @@ import base64
 import html
 import json
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -119,6 +120,58 @@ def _arbeitnow(cfg: dict, term: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+_jooble_calls = 0
+
+
+def _jooble(cfg: dict, term: str) -> pd.DataFrame:
+    """Official Jooble REST API (free key: https://jooble.org/api/about), JOOBLE_API_KEY in .env.
+    The website itself blocks scripts, so the API is the only route. The free key has 500
+    requests in total, so each run uses at most `jooble_max_requests` of them."""
+    global _jooble_calls
+    key = os.environ.get("JOOBLE_API_KEY")
+    if not key:
+        logger.warning("jooble: JOOBLE_API_KEY not set, skipping")
+        return pd.DataFrame()
+    if _jooble_calls >= cfg.get("jooble_max_requests", 20):
+        return pd.DataFrame()
+    _jooble_calls += 1
+    r = requests.post(f"https://jooble.org/api/{key}", timeout=30,
+                      json={"keywords": term, "location": cfg["location"], "page": "1"})
+    r.raise_for_status()
+    rows = []
+    for j in r.json().get("jobs", [])[: cfg["results_per_search"]]:
+        rows.append({
+            "title": _text(j.get("title")), "company": j.get("company") or None,
+            "location": j.get("location"), "site": "jooble",
+            "date_posted": (j.get("updated") or "")[:10] or None,
+            "job_url": j.get("link"), "job_url_direct": None, "description": _text(j.get("snippet")),
+        })
+    return pd.DataFrame(rows)
+
+
+def _stepstone(cfg: dict, term: str) -> pd.DataFrame:
+    """StepStone's search page carries its results as JSON (title, company, location, date,
+    snippet). Posting pages time out for scripts, so only the search page is read."""
+    slug = re.sub(r"[^a-z0-9]+", "-", term.lower()).strip("-")
+    r = _utf8(requests.get(f"https://www.stepstone.de/jobs/{slug}", headers=WEB_HEADERS, timeout=30))
+    r.raise_for_status()
+    marker = 'window.__PRELOADED_STATE__["app-unifiedResultlist"] ='
+    if marker not in r.text:
+        logger.warning("[stepstone] result JSON not found; the page layout changed")
+        return pd.DataFrame()
+    state, _ = json.JSONDecoder().raw_decode(r.text.split(marker, 1)[1].lstrip())
+    rows = []
+    for j in state.get("searchResults", {}).get("items", [])[: cfg["results_per_search"]]:
+        rows.append({
+            "title": _text(j.get("title")), "company": j.get("companyName"),
+            "location": j.get("location"), "site": "stepstone",
+            "date_posted": (j.get("datePosted") or "")[:10] or None,
+            "job_url": (j.get("url") or "").split("?")[0], "job_url_direct": None,
+            "description": _text(j.get("textSnippet")),
+        })
+    return pd.DataFrame(rows)
+
+
 def _jobposting(page: str) -> dict | None:
     for m in re.findall(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', page, re.S):
         try:
@@ -153,9 +206,6 @@ def _microdata(page: str) -> dict | None:
 
 # name -> (listing URL template, regex for posting links, URL prefix for relative links)
 HTML_BOARDS = {
-    # links were relative until 2026, now absolute; accept both
-    "stepstone": ("https://www.stepstone.de/jobs/{slug}",
-                  r'href="(?:https://www\.stepstone\.de)?(/stellenangebote--[^"#]+)"', "https://www.stepstone.de"),
     "xing": ("https://www.xing.com/jobs/search?keywords={q}", r'href="(/jobs/[a-z0-9-]+-\d{6,}[^"#]*)"', "https://www.xing.com"),
     "fraunhofer": ("https://jobs.fraunhofer.de/search/?q={q}", r'href="(/job/[^"#]+)"', "https://jobs.fraunhofer.de"),
     "jobware": ("https://www.jobware.de/jobsuche?jw_jobname={q}", r'href="(/job/[^"#]+)"', "https://www.jobware.de"),
@@ -315,6 +365,10 @@ def scrape_term(cfg: dict, bucket: str, term: str, only: list[str] | None = None
     for board in cfg.get("extra_sites", []):
         if board == "arbeitnow":
             sources[board] = lambda: _arbeitnow(cfg, term)
+        elif board == "jooble":
+            sources[board] = lambda: _jooble(cfg, term)
+        elif board == "stepstone":
+            sources[board] = lambda: _stepstone(cfg, term)
         elif board in HTML_BOARDS:
             sources[board] = lambda b=board: _html_board(cfg, b, term)
         else:
