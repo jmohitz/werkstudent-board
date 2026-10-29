@@ -14,7 +14,8 @@ linkedin_fetch_description: true   # slower, but gives the LLM much better input
 # jobvector.de is behind a Cloudflare challenge, dfki.de too (Cloudflare); are not supported.
 extra_sites: ["arbeitnow", "jooble", "stepstone", "xing", "jobware", "fraunhofer"]
 jooble_max_requests: 20   # the free Jooble key has 500 requests in total; this many per run (first terms)
-html_board_max_jobs: 15    # postings fetched per term per HTML board
+html_board_max_jobs: 35    # new postings fetched per term per HTML board (known ones are skipped first)
+stepstone_max_pages: 3     # StepStone reads the next page only while a page is full and mostly new
 google: true              # Google Jobs via JobSpy (flaky; failures are skipped)
 arbeitsagentur:            # Bundesagentur fuer Arbeit Jobsuche API
   enabled: true
@@ -45,7 +46,12 @@ arbeitsagentur:            # Bundesagentur fuer Arbeit Jobsuche API
     - "Abschlussarbeit IT"
     - "Masterarbeit Data"
     - "Studentische Hilfskraft Informatik"
-sleep_between_searches: 6  # seconds; be gentle to avoid rate limits
+# Sources run in parallel within a term (each is a different site); every site keeps its own pace:
+# at least this many seconds between two searches on the same site
+sleep_between_searches: 6  # default gap per site
+site_gap_s:
+  jobspy: 10               # LinkedIn/Indeed/Glassdoor rate-limit the most
+  google: 10
 
 # Startup career pages, read once per run from their applicant-tracking system's public feed.
 # Only student-looking titles (Werkstudent, intern, thesis...) in Germany/remote are kept.

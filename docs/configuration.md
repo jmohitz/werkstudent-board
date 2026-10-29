@@ -25,9 +25,11 @@ Changing `EMBED_MODEL` makes old vectors incomparable: clear `job_embeddings` an
 | `linkedin_fetch_description` | fetch full LinkedIn descriptions (slower, much better classification) |
 | `jooble_max_requests` | Jooble API calls per run (20); the free key has 500 in total |
 | `extra_sites` | `arbeitnow`, `jooble` (needs `JOOBLE_API_KEY`), `stepstone`, `xing`, `jobware`, `fraunhofer` |
-| `html_board_max_jobs` | postings fetched per term per HTML board |
+| `html_board_max_jobs` | new postings fetched per term per HTML board (35); known postings are skipped before fetching |
+| `stepstone_max_pages` | StepStone reads the next page only while a page is full and mostly new (3) |
 | `google` | Google Jobs via JobSpy |
-| `sleep_between_searches` | seconds between terms |
+| `sleep_between_searches` | default seconds between two searches on the same site (sources run in parallel within a term) |
+| `site_gap_s` | per-site override of that gap, e.g. `jobspy: 10` |
 | `searches` | search terms per bucket (`working_student`, `internship`, `thesis`); the bucket is only a hint, the LLM decides |
 
 ### Arbeitsagentur (`arbeitsagentur:`)

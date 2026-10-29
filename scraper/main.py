@@ -18,7 +18,7 @@ import yaml
 from dotenv import load_dotenv
 
 from classify import Classifier
-from scrape import dedupe, iter_searches, scrape_term
+from scrape import TERM_INDEPENDENT, dedupe, iter_searches, scrape_term
 from db import delete_expired, load_seen, save_jobs
 
 BASE = Path(__file__).parent
@@ -93,7 +93,9 @@ def main():
                 if not args.only or args.only.lower() in f"{b} {t}".lower()]
     if args.sources:
         wanted = [s.strip() for s in args.sources.split(",") if s.strip()]
-        searches = [(b, t, [s for s in (o or wanted) if s in wanted]) for b, t, o in searches]
+        # per-term searches never run the once-per-run sources (they have their own search)
+        per_term = [s for s in wanted if s not in TERM_INDEPENDENT]
+        searches = [(b, t, [s for s in o if s in wanted] if o else per_term) for b, t, o in searches]
         searches = [(b, t, o) for b, t, o in searches if o]
     logger.info(f"{len(searches)} search terms")
     for bucket, term, only in searches:
@@ -151,7 +153,6 @@ def main():
             logger.info(f"saved {len(df)} jobs from '{term}' (run total {total})")
         except Exception as e:
             logger.error(f"Search '{term}' failed, continuing: {e}")
-        time.sleep(cfg.get("sleep_between_searches", 5))
 
     logger.info(f"Pipeline finished: {total} new jobs -> {today_path}")
 

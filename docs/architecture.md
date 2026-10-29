@@ -17,7 +17,8 @@ Three parts share one Postgres database:
    classified twice.
 3. **For each search** (`config.yaml` `searches`, then Arbeitsagentur-only searches, then the startup
    sources):
-   1. scrape every source for the term (a failing source is logged and skipped)
+   1. scrape every source for the term **in parallel**, each site at its own pace (a failing source is
+      logged and skipped)
    2. drop known jobs and in-run duplicates
    3. drop titles matching `reject_title_patterns` (Senior, Lead, Ausbildung, ...) without an LLM call
    4. **classify** the rest in parallel (see below)
@@ -32,7 +33,7 @@ Three parts share one Postgres database:
 | LinkedIn, Indeed, Glassdoor | [JobSpy](https://github.com/speedyapply/JobSpy) | Glassdoor/LinkedIn sometimes rate-limit (429) |
 | Google Jobs | JobSpy | currently returns nothing; kept, failures are skipped |
 | Arbeitsagentur | documented public Jobsuche API (`/pc/v6/jobs`, details via `/pc/v4/jobdetails`) | own 7-day window + 20 broad German extra searches |
-| Arbeitnow | public JSON API | |
+| Arbeitnow | public JSON API | ignores search terms, so it's read once per run and filtered to student titles |
 | Jooble | official REST API (`JOOBLE_API_KEY`) | short snippets only; the free key has 500 requests in total, capped per run |
 | StepStone | the search page's embedded result JSON (title, company, date, snippet) | posting pages time out for scripts, so they aren't fetched |
 | Xing, Jobware, Fraunhofer | search page + each posting's schema.org `JobPosting` data (JSON-LD or microdata) | best-effort HTML; max 15 postings per term |

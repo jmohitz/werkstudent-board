@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import quote_plus
 
@@ -14,6 +16,24 @@ import requests
 from jobspy import scrape_jobs
 
 logger = logging.getLogger("scrape")
+
+# Sources fed once per run instead of once per term (their results don't depend on the term)
+TERM_INDEPENDENT = {"company_boards", "berlinstartupjobs", "arbeitnow"}
+
+_last_call: dict[str, float] = {}
+_pace_lock = threading.Lock()
+
+
+def _pace(cfg: dict, site: str):
+    """Different sites are queried in parallel, but each site keeps its own pace: at least
+    `site_gap_s[site]` (default `sleep_between_searches`) seconds between two searches on it."""
+    gap = cfg.get("site_gap_s", {}).get(site, cfg.get("sleep_between_searches", 6))
+    with _pace_lock:
+        now = time.monotonic()
+        start = max(now, _last_call.get(site, 0) + gap)
+        _last_call[site] = start
+    if start > now:
+        time.sleep(start - now)
 
 # Documented community API (https://github.com/bundesAPI/jobsuche-api) with its public client key.
 # Search moved to /pc/v6 in 2026 (the old /pc/v4/jobs route now answers 403 "No match found")
@@ -35,6 +55,8 @@ def iter_searches(cfg: dict):
         yield "startups", "startup career pages", ["company_boards"]
     if cfg.get("berlinstartupjobs", True):
         yield "startups", "Berlin Startup Jobs feed", ["berlinstartupjobs"]
+    if "arbeitnow" in cfg.get("extra_sites", []):
+        yield "startups", "Arbeitnow newest jobs", ["arbeitnow"]
 
 
 def _jobspy(cfg: dict, term: str, sites: list[str], **extra) -> pd.DataFrame:
@@ -103,13 +125,15 @@ def _text(s: str | None) -> str:
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
 
 
-def _arbeitnow(cfg: dict, term: str) -> pd.DataFrame:
-    """Free public JSON API (https://www.arbeitnow.com/api/job-board-api)."""
-    r = requests.get("https://www.arbeitnow.com/api/job-board-api", params={"search": term},
-                     headers=WEB_HEADERS, timeout=30)
+def _arbeitnow(cfg: dict, skip_urls: set = frozenset()) -> pd.DataFrame:
+    """Free public JSON API (https://www.arbeitnow.com/api/job-board-api). It ignores the search
+    term and returns the newest jobs, so it's read once per run and filtered to student titles."""
+    r = requests.get("https://www.arbeitnow.com/api/job-board-api", headers=WEB_HEADERS, timeout=30)
     r.raise_for_status()
     rows = []
-    for j in r.json().get("data", [])[: cfg["results_per_search"]]:
+    for j in r.json().get("data", []):
+        if j.get("url") in skip_urls or not STUDENT_TITLE.search(j.get("title") or ""):
+            continue
         rows.append({
             "title": j.get("title"), "company": j.get("company_name"),
             "location": j.get("location"), "site": "arbeitnow",
@@ -149,19 +173,30 @@ def _jooble(cfg: dict, term: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _stepstone(cfg: dict, term: str) -> pd.DataFrame:
+def _stepstone(cfg: dict, term: str, skip_urls: set = frozenset()) -> pd.DataFrame:
     """StepStone's search page carries its results as JSON (title, company, location, date,
-    snippet). Posting pages time out for scripts, so only the search page is read."""
+    snippet). Posting pages time out for scripts, so only search pages are read. The next page
+    is read only while a page is full and mostly new (results are newest first)."""
     slug = re.sub(r"[^a-z0-9]+", "-", term.lower()).strip("-")
-    r = _utf8(requests.get(f"https://www.stepstone.de/jobs/{slug}", headers=WEB_HEADERS, timeout=30))
-    r.raise_for_status()
     marker = 'window.__PRELOADED_STATE__["app-unifiedResultlist"] ='
-    if marker not in r.text:
-        logger.warning("[stepstone] result JSON not found; the page layout changed")
-        return pd.DataFrame()
-    state, _ = json.JSONDecoder().raw_decode(r.text.split(marker, 1)[1].lstrip())
+    items = []
+    for page in range(1, cfg.get("stepstone_max_pages", 3) + 1):
+        if page > 1:
+            time.sleep(2)
+        r = _utf8(requests.get(f"https://www.stepstone.de/jobs/{slug}", params={"page": page} if page > 1 else None,
+                               headers=WEB_HEADERS, timeout=30))
+        r.raise_for_status()
+        if marker not in r.text:
+            logger.warning("[stepstone] result JSON not found; the page layout changed")
+            break
+        state, _ = json.JSONDecoder().raw_decode(r.text.split(marker, 1)[1].lstrip())
+        found = state.get("searchResults", {}).get("items", [])
+        items += found
+        new = sum((j.get("url") or "").split("?")[0] not in skip_urls for j in found)
+        if len(found) < 25 or new < len(found) / 2:
+            break
     rows = []
-    for j in state.get("searchResults", {}).get("items", [])[: cfg["results_per_search"]]:
+    for j in items:
         rows.append({
             "title": _text(j.get("title")), "company": j.get("companyName"),
             "location": j.get("location"), "site": "stepstone",
@@ -220,16 +255,18 @@ def _utf8(resp: requests.Response) -> requests.Response:
     return resp
 
 
-def _html_board(cfg: dict, name: str, term: str) -> pd.DataFrame:
-    """Best-effort: read the search page, then each posting's schema.org JobPosting JSON-LD."""
+def _html_board(cfg: dict, name: str, term: str, skip_urls: set = frozenset()) -> pd.DataFrame:
+    """Best-effort: read the search page, then each new posting's schema.org JobPosting JSON-LD.
+    Known postings are skipped before their page is fetched."""
     tmpl, pattern, prefix = HTML_BOARDS[name]
     slug = re.sub(r"[^a-z0-9]+", "-", term.lower()).strip("-")
     r = _utf8(requests.get(tmpl.format(slug=slug, q=quote_plus(term)), headers=WEB_HEADERS, timeout=30))
     r.raise_for_status()
     links = list(dict.fromkeys(html.unescape(l) for l in re.findall(pattern, r.text)))
+    new = [prefix + l for l in links if prefix + l not in skip_urls]
     rows = []
-    for link in links[: cfg.get("html_board_max_jobs", 15)]:
-        url = prefix + link
+    for url in new[: cfg.get("html_board_max_jobs", 15)]:
+        link = url[len(prefix):]
         time.sleep(1)
         try:
             p = _utf8(requests.get(url, headers=WEB_HEADERS, timeout=30))
@@ -363,14 +400,14 @@ def scrape_term(cfg: dict, bucket: str, term: str, only: list[str] | None = None
     if cfg.get("arbeitsagentur", {}).get("enabled", False):
         sources["arbeitsagentur"] = lambda: _arbeitsagentur(cfg, term, skip_urls)
     for board in cfg.get("extra_sites", []):
-        if board == "arbeitnow":
-            sources[board] = lambda: _arbeitnow(cfg, term)
+        if board in TERM_INDEPENDENT:
+            continue
         elif board == "jooble":
             sources[board] = lambda: _jooble(cfg, term)
         elif board == "stepstone":
-            sources[board] = lambda: _stepstone(cfg, term)
+            sources[board] = lambda: _stepstone(cfg, term, skip_urls)
         elif board in HTML_BOARDS:
-            sources[board] = lambda b=board: _html_board(cfg, b, term)
+            sources[board] = lambda b=board: _html_board(cfg, b, term, skip_urls)
         else:
             logger.warning(f"unknown extra site '{board}'")
     if only:
@@ -380,13 +417,22 @@ def scrape_term(cfg: dict, bucket: str, term: str, only: list[str] | None = None
             sources["company_boards"] = lambda: _company_boards(cfg, skip_urls)
         if "berlinstartupjobs" in only:
             sources["berlinstartupjobs"] = lambda: _berlinstartupjobs(cfg)
+        if "arbeitnow" in only:
+            sources["arbeitnow"] = lambda: _arbeitnow(cfg, skip_urls)
 
-    for name, fn in sources.items():
+    def run(name, fn):
+        _pace(cfg, name)
         try:
-            df = fn()
+            return fn()
         except Exception as e:
             logger.error(f"[{name}] failed for '{term}': {e}")
-            continue
+            return None
+
+    # every source is a different site, so they can all run at once
+    with ThreadPoolExecutor(max_workers=max(1, len(sources))) as pool:
+        results = list(zip(sources, pool.map(lambda kv: run(*kv), sources.items())))
+
+    for name, df in results:
         if df is not None and not df.empty:
             logger.info(f"[{name}] {len(df)} results for '{term}'")
             frames.append(df)

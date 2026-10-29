@@ -12,8 +12,9 @@ cd scraper
 .venv/bin/python main.py --sources stepstone      # all terms, but only the listed sources (comma-separated)
 ```
 
-A full run takes about 3-5 hours, mostly scraping (each term is searched on every source with polite
-pauses). Already-known jobs are skipped before classification, so repeat runs stay cheap on the LLM
+Within each term the sources run in parallel (they are different sites); each site keeps its own pace
+(`site_gap_s`), so no site gets more than one request at a time. A term takes about 25-40 s plus
+classification. Already-known jobs are skipped before classification, so repeat runs stay cheap on the LLM
 side. Logs go to the console and `scraper/output/run.log`.
 
 On macOS run it under `caffeinate -i` so the machine doesn't idle-sleep. Closing the lid or losing
