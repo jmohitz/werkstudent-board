@@ -36,7 +36,7 @@ Three parts share one Postgres database:
 | Arbeitnow | public JSON API | ignores search terms, so it's read once per run and filtered to student titles |
 | Jooble | official REST API (`JOOBLE_API_KEY`) | short snippets only; the free key has 500 requests in total, capped per run |
 | StepStone | the search page's embedded result JSON (title, company, date, snippet) | posting pages time out for scripts, so they aren't fetched |
-| Xing, Jobware, Fraunhofer | search page + each posting's schema.org `JobPosting` data (JSON-LD or microdata) | best-effort HTML; max 15 postings per term |
+| Xing, Jobware, Fraunhofer | search page + each posting's schema.org `JobPosting` data (JSON-LD or microdata) | best-effort HTML; up to 35 new postings per term, known ones skipped before fetching |
 | Startup career pages | public ATS feeds: Greenhouse, Ashby, Lever, Personio | 26 companies; only student titles in Germany/remote are kept |
 | Berlin Startup Jobs | official RSS feed (engineering) | mostly full-time, filtered out later |
 

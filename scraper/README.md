@@ -5,6 +5,7 @@ The daily pipeline: scrape -> classify -> save to Postgres.
 ```bash
 .venv/bin/python main.py                 # full run
 .venv/bin/python main.py --only thesis   # subset of searches
+.venv/bin/python main.py --sources xing  # all terms, selected sources only
 ```
 
 See the repo docs:

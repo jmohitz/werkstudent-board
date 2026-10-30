@@ -24,6 +24,8 @@ you filter them, rank them against your CV, track applications and draft cover l
 
 - **~140 searches per run** across LinkedIn, Indeed, Glassdoor, Xing, StepStone, Jobware, Arbeitnow,
   Jooble, Fraunhofer, the Arbeitsagentur, 26 startup career pages and Berlin Startup Jobs
+- **Fast runs**: sources are scraped in parallel per term, each site at its own polite pace; known
+  postings are skipped before they are fetched or classified
 - **Profile-free classification** with Gemini (several models, each kept under its free quota), local
   Ollama as fallback; full-time, mid/senior and non-technical roles are dropped
 - **Board** in a dense, dark, foorilla-style UI: filters for category, posting date, field, source,
@@ -58,7 +60,14 @@ cd ..
 # 4. board
 python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/uvicorn app:app --app-dir backend --port 8000
+
+# 5. analytics (optional): dbt models behind the insights page
+cd analytics && uv venv -p 3.12 .venv && uv pip install -p .venv dbt-postgres
+DBT_PROFILES_DIR=. .venv/bin/dbt snapshot && DBT_PROFILES_DIR=. .venv/bin/dbt build
 ```
+
+Open <http://localhost:8000> for the board and <http://localhost:8000/insights.html> for the insights.
+For a daily schedule, see [operations](docs/operations.md#daily-schedule-macos-launchd).
 
 Open <http://localhost:8000>, upload your CV in the sidebar and switch the sort to **Best match**.
 
@@ -82,7 +91,7 @@ backend/      FastAPI app: API, resume matching, cover letters; serves the front
 frontend/     plain HTML/CSS/JS board and insights page, no build step
 analytics/    dbt project: staging, marts, snapshot, tests (see analytics/README.md)
 db/           schema (init.sql) and migrations
-scripts/      demo_data.py: sample dataset for a read-only demo
+scripts/      daily.sh (scrape + dbt, for the schedule), demo_data.py (sample dataset for a demo)
 docs/         architecture, configuration, API, operations
 ```
 

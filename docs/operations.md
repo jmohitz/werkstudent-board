@@ -7,14 +7,15 @@ cd scraper
 .venv/bin/python main.py                        # full run (~140 searches)
 .venv/bin/python main.py --hours-old 72         # look back 3 days for JobSpy sources
 .venv/bin/python main.py --only thesis          # only searches containing "thesis"
-.venv/bin/python main.py --only startups        # only the startup career pages + Berlin Startup Jobs
+.venv/bin/python main.py --only startups        # once-per-run sources: career pages, Berlin Startup Jobs, Arbeitnow
 .venv/bin/python main.py --only arbeitsagentur  # only the Arbeitsagentur extra searches
-.venv/bin/python main.py --sources stepstone      # all terms, but only the listed sources (comma-separated)
+.venv/bin/python main.py --sources stepstone,xing # all terms, only these sources (comma-separated)
 ```
 
 Within each term the sources run in parallel (they are different sites); each site keeps its own pace
 (`site_gap_s`), so no site gets more than one request at a time. A term takes about 25-40 s plus
-classification. Already-known jobs are skipped before classification, so repeat runs stay cheap on the LLM
+classification, so a daily run takes roughly 1-1.5 hours; after a long break (many new jobs) the
+Gemini quotas make classification the slow part. Already-known jobs are skipped before classification, so repeat runs stay cheap on the LLM
 side. Logs go to the console and `scraper/output/run.log`.
 
 On macOS run it under `caffeinate -i` so the machine doesn't idle-sleep. Closing the lid or losing
@@ -33,7 +34,8 @@ scrape for "Best match" to cover the new jobs.
 
 ## Daily schedule (macOS, launchd)
 
-cron skips runs while the Mac sleeps; launchd catches up after wake. Save as
+`scripts/daily.sh` runs the scraper and then `dbt snapshot && dbt build`, so the insights page and the
+job history stay current. cron skips runs while the Mac sleeps; launchd catches up after wake. Save as
 `~/Library/LaunchAgents/de.werkstudent-board.scrape.plist` (adjust the path), then
 `launchctl load ~/Library/LaunchAgents/de.werkstudent-board.scrape.plist`:
 
@@ -42,10 +44,10 @@ cron skips runs while the Mac sleeps; launchd catches up after wake. Save as
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>de.werkstudent-board.scrape</string>
-  <key>WorkingDirectory</key><string>/Users/YOU/projects/werkstudent-board/scraper</string>
+  <key>WorkingDirectory</key><string>/Users/YOU/projects/werkstudent-board</string>
   <key>ProgramArguments</key><array>
     <string>/usr/bin/caffeinate</string><string>-i</string>
-    <string>/Users/YOU/projects/werkstudent-board/scraper/.venv/bin/python</string><string>main.py</string>
+    <string>/Users/YOU/projects/werkstudent-board/scripts/daily.sh</string>
   </array>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
   <key>StandardOutPath</key><string>/tmp/werkstudent-board-scrape.log</string>
@@ -53,8 +55,8 @@ cron skips runs while the Mac sleeps; launchd catches up after wake. Save as
 </dict></plist>
 ```
 
-Docker (the database) must be running at that time. To keep the dbt history and insights current,
-run `dbt snapshot && dbt build` in `analytics/` after the scrape (see [analytics/README.md](../analytics/README.md)).
+Docker (the database) must be running at that time. Without the dbt setup (`analytics/.venv`), the
+script only scrapes.
 
 ## Database migrations
 
@@ -88,6 +90,9 @@ Enabling billing on the key removes most of this; raise `gemini.rpm` accordingly
 | Scrape seems stuck on one term | a hanging HTTP request during a network drop; it resumes when the connection is back |
 | Frontend changes don't show | hard-reload once (Cmd+Shift+R); the server now sends `no-cache` |
 | Names like `KÃ¶ster` | encoding from pages without a charset; fixed in the scraper, old rows were repaired |
+| `[stepstone] result JSON not found` | StepStone changed its search page layout; `_stepstone()` in `scrape.py` needs the new marker |
+| `[jooble] no results` for every term after the first 20 | expected: `jooble_max_requests` per run is used up (the free key has 500 in total) |
+| Insights page: "Run `dbt build` ... first" | the marts don't exist yet; run `dbt build` in `analytics/` |
 | Ollama hangs | output is capped (`num_predict`) and timed out; if it still stalls, `ollama stop qwen2.5:3b` |
 
 ## Public demo
