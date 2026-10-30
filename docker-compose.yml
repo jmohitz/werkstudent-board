@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16
     container_name: board-db
+    restart: unless-stopped   # back up after a reboot/Docker restart, so the daily run finds it
     environment:
       POSTGRES_USER: board
       POSTGRES_PASSWORD: board

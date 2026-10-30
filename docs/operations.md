@@ -55,7 +55,8 @@ job history stay current. cron skips runs while the Mac sleeps; launchd catches 
 </dict></plist>
 ```
 
-Docker (the database) must be running at that time. Without the dbt setup (`analytics/.venv`), the
+Docker Desktop must be running at that time (enable "Start Docker Desktop when you sign in"); the
+database container restarts with it (`restart: unless-stopped`). Without the dbt setup (`analytics/.venv`), the
 script only scrapes.
 
 ## Database migrations
